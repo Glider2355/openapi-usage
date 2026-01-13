@@ -133,6 +133,35 @@ export function analyzeTypeScriptFiles(
 }
 
 /**
+ * Find variable names that are assigned from createClient()
+ * e.g., const api = createClient<paths>() -> returns ["api"]
+ */
+export function findOpenApiFetchClients(sourceFile: SourceFile): Set<string> {
+	const clientNames = new Set<string>();
+
+	sourceFile.forEachDescendant((node) => {
+		if (!Node.isVariableDeclaration(node)) return;
+
+		const initializer = node.getInitializer();
+		if (!initializer || !Node.isCallExpression(initializer)) return;
+
+		const callExpr = initializer.getExpression();
+
+		// Check for createClient() or createClient<T>()
+		if (Node.isIdentifier(callExpr) && callExpr.getText() === "createClient") {
+			clientNames.add(node.getName());
+		}
+	});
+
+	// Fallback: if no createClient found, use "client" as default
+	if (clientNames.size === 0) {
+		clientNames.add("client");
+	}
+
+	return clientNames;
+}
+
+/**
  * Analyze a single source file for API calls
  */
 export function analyzeSourceFile(
@@ -144,22 +173,25 @@ export function analyzeSourceFile(
 	const filePath = sourceFile.getFilePath();
 	const relativeFilePath = relative(resolve(srcPath, ".."), filePath);
 
+	// Find all openapi-fetch client variable names in this file
+	const clientNames = findOpenApiFetchClients(sourceFile);
+
 	sourceFile.forEachDescendant((node) => {
 		if (!Node.isCallExpression(node)) return;
 
 		const callExpr = node as CallExpression;
 		const expression = callExpr.getExpression();
 
-		// Check if it's a property access like client.GET or client.POST
+		// Check if it's a property access like client.GET or api.POST
 		if (!Node.isPropertyAccessExpression(expression)) return;
 
 		const methodName = expression.getName();
 		const objectExpr = expression.getExpression();
 
-		// Check if the object is "client" and method is an HTTP method
+		// Check if the object is a known client and method is an HTTP method
 		if (
 			!Node.isIdentifier(objectExpr) ||
-			objectExpr.getText() !== "client" ||
+			!clientNames.has(objectExpr.getText()) ||
 			!HTTP_METHODS.includes(methodName as HttpMethod)
 		) {
 			return;

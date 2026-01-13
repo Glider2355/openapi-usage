@@ -19,8 +19,7 @@ program
 	.requiredOption("-o, --openapi <path>", "Path to OpenAPI spec file")
 	.requiredOption("-s, --src <path>", "Path to source directory")
 	.option("--output <path>", "Output JSON file path")
-	.option("--check", "Check mode (exit 1 if unused APIs exist)")
-	.option("--ignore <patterns...>", "Glob patterns to ignore");
+	.option("--check", "Check mode (exit 1 if unused APIs exist)");
 
 program.parse();
 
@@ -29,7 +28,6 @@ const options = program.opts<{
 	src: string;
 	output?: string;
 	check?: boolean;
-	ignore?: string[];
 }>();
 
 // Resolve paths

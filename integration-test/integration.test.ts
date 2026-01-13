@@ -265,4 +265,53 @@ client.GET("/users"); // line 4
 
 		expect(usages.get("GET /users")?.[0].line).toBe(4);
 	});
+
+	it("should detect custom client names from createClient", () => {
+		const spec: OpenAPISpec = {
+			paths: {
+				"/users": { get: {} },
+				"/posts": { get: {} },
+			},
+		};
+
+		writeFileSync(
+			join(SRC_DIR, "api.ts"),
+			`
+import createClient from "openapi-fetch";
+
+const api = createClient<paths>();
+api.GET("/users");
+
+const httpClient = createClient<paths>();
+httpClient.GET("/posts");
+`,
+		);
+
+		const endpoints = parseOpenAPISpec(spec);
+		const usages = analyzeTypeScriptFiles(endpoints, { srcPath: SRC_DIR });
+
+		expect(usages.get("GET /users")).toHaveLength(1);
+		expect(usages.get("GET /posts")).toHaveLength(1);
+	});
+
+	it("should ignore non-createClient objects", () => {
+		const spec: OpenAPISpec = {
+			paths: {
+				"/users": { get: {} },
+			},
+		};
+
+		writeFileSync(
+			join(SRC_DIR, "api.ts"),
+			`
+const axios = createAxiosInstance();
+axios.GET("/users");
+`,
+		);
+
+		const endpoints = parseOpenAPISpec(spec);
+		const usages = analyzeTypeScriptFiles(endpoints, { srcPath: SRC_DIR });
+
+		expect(usages.get("GET /users")).toHaveLength(0);
+	});
 });

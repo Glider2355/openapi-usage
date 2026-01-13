@@ -159,7 +159,27 @@ client.GET("/users/123");
 		expect(usages.get("GET /users/{id}")).toHaveLength(1);
 	});
 
-	it("should ignore non-client calls", () => {
+	it("should ignore non-openapi-fetch calls", () => {
+		const source = project.createSourceFile(
+			"/src/test.ts",
+			`
+const axios = createAxiosClient();
+axios.GET("/users");
+`,
+			{ overwrite: true },
+		);
+
+		const endpoints = new Map([["GET /users", new Set<string>()]]);
+		const usages = new Map<string, { file: string; line: number }[]>([
+			["GET /users", []],
+		]);
+
+		analyzeSourceFile(source, "/src", endpoints, usages);
+
+		expect(usages.get("GET /users")).toHaveLength(0);
+	});
+
+	it("should detect createClient variable with custom name", () => {
 		const source = project.createSourceFile(
 			"/src/test.ts",
 			`
@@ -176,6 +196,6 @@ api.GET("/users");
 
 		analyzeSourceFile(source, "/src", endpoints, usages);
 
-		expect(usages.get("GET /users")).toHaveLength(0);
+		expect(usages.get("GET /users")).toHaveLength(1);
 	});
 });

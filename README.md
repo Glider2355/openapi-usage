@@ -5,8 +5,52 @@ OpenAPI 仕様を正として、フロントエンドの API 呼び出しを静�
 ## 前提条件
 
 - `openapi-typescript` + `openapi-fetch` を使用したAPIクライアント
-- `client.GET("/path")` 形式の呼び出し
+- `createClient()` で作成されたクライアント（変数名は自動検出）
 - 動的パス生成なし（文字列リテラルのみ）
+
+## 検知パターン
+
+### 検知できる
+
+```typescript
+// 文字列リテラル
+client.GET("/users");
+
+// createClient で作成した任意の変数名
+const api = createClient<paths>();
+api.GET("/users");
+
+// 三項演算子
+client.GET(isAdmin ? "/admins" : "/users");
+
+// 単純な変数参照
+const path = "/users";
+client.GET(path);
+
+// パスパラメータ（推奨パターン）
+client.GET("/users/{id}", { params: { path: { id: userId } } });
+```
+
+### 検知できない
+
+```typescript
+// テンプレートリテラル（型安全性も失われるため非推奨）
+client.GET(`/users/${id}`);
+
+// 関数の戻り値
+const path = getPath();
+client.GET(path);
+
+// 文字列結合
+client.GET("/users" + "/" + id);
+
+// 動的に構築されたパス
+const base = "/users";
+client.GET(`${base}/${id}`);
+```
+
+> **Note:** 検知できないパターンは `openapi-fetch` の型安全性も失われます。
+> パスパラメータは `params.path` で渡す方法を推奨します。
 
 ## 使い方
 
@@ -49,7 +93,6 @@ openapi-usage --openapi <path> --src <path> [options]
 オプション:
   --output <path>       JSON出力先パス
   --check               チェックモード（未使用があればexit 1）
-  --ignore <patterns>   除外パターン（glob形式、複数指定可）
 ```
 
 ## 出力形式
