@@ -1,131 +1,11 @@
 import { relative, resolve } from "node:path";
 import { type CallExpression, Node, Project, type SourceFile } from "ts-morph";
+import { extractStringLiterals } from "./extractors.js";
+import { findMatchingEndpoint } from "./path-matcher.js";
 import { HTTP_METHODS, type HttpMethod, type Usage } from "./types.js";
 
-function extractFromStringLiteral(node: Node): string[] | null {
-	if (!Node.isStringLiteral(node)) return null;
-	return [node.getLiteralValue()];
-}
-
-function extractFromTemplateLiteral(node: Node): string[] | null {
-	if (!Node.isNoSubstitutionTemplateLiteral(node)) return null;
-	return [node.getLiteralValue()];
-}
-
-function extractFromTemplateExpression(node: Node): string[] | null {
-	if (!Node.isTemplateExpression(node)) return null;
-	// Convert template expression to OpenAPI path pattern
-	// e.g., `/users/${id}` -> `/users/{id}`
-	const head = node.getHead().getText().slice(1, -2); // Remove ` and ${
-	const spans = node.getTemplateSpans();
-
-	let pattern = head;
-	for (const span of spans) {
-		const expr = span.getExpression();
-		const varName = Node.isIdentifier(expr) ? expr.getText() : "param";
-		pattern += `{${varName}}`;
-		const literal = span.getLiteral();
-		const literalText = literal.getText();
-		// Remove }` or }${ from the literal text
-		const cleanText = literalText.startsWith("}")
-			? literalText.slice(1, literalText.endsWith("`") ? -1 : -2)
-			: literalText;
-		pattern += cleanText;
-	}
-
-	return [pattern];
-}
-
-function extractFromConditionalExpression(node: Node): string[] | null {
-	if (!Node.isConditionalExpression(node)) return null;
-	return [
-		...extractStringLiterals(node.getWhenTrue()),
-		...extractStringLiterals(node.getWhenFalse()),
-	];
-}
-
-function extractFromIdentifier(node: Node): string[] | null {
-	if (!Node.isIdentifier(node)) return null;
-	const results: string[] = [];
-	for (const def of node.getDefinitionNodes()) {
-		if (Node.isVariableDeclaration(def) || Node.isParameterDeclaration(def)) {
-			const initializer = def.getInitializer();
-			if (initializer) {
-				results.push(...extractStringLiterals(initializer));
-			}
-		}
-	}
-	return results;
-}
-
-function extractFromParenthesizedExpression(node: Node): string[] | null {
-	if (!Node.isParenthesizedExpression(node)) return null;
-	return extractStringLiterals(node.getExpression());
-}
-
-function extractFromAsExpression(node: Node): string[] | null {
-	if (!Node.isAsExpression(node)) return null;
-	return extractStringLiterals(node.getExpression());
-}
-
-const stringLiteralExtractors = [
-	extractFromStringLiteral,
-	extractFromTemplateLiteral,
-	extractFromTemplateExpression,
-	extractFromConditionalExpression,
-	extractFromIdentifier,
-	extractFromParenthesizedExpression,
-	extractFromAsExpression,
-];
-
-/**
- * Extract string literals from an expression (handles variables, ternary, etc.)
- */
-export function extractStringLiterals(node: Node): string[] {
-	for (const extractor of stringLiteralExtractors) {
-		const result = extractor(node);
-		if (result !== null) {
-			return result;
-		}
-	}
-	return [];
-}
-
-/**
- * Escape special regex characters in a string
- */
-function escapeRegex(str: string): string {
-	return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-/**
- * Find matching endpoint with path parameter patterns
- */
-export function findMatchingEndpoint(
-	key: string,
-	endpoints: Map<string, Set<string>>,
-): string | null {
-	const [method, path] = key.split(" ", 2);
-
-	for (const endpointKey of endpoints.keys()) {
-		const [endpointMethod, endpointPath] = endpointKey.split(" ", 2);
-
-		if (method !== endpointMethod) continue;
-
-		// Convert OpenAPI path pattern to regex
-		// First escape special chars, then replace path params
-		// e.g., /api/v1.0/users/{id} -> /api/v1\.0/users/[^/]+
-		const escapedPath = escapeRegex(endpointPath);
-		const regexPattern = escapedPath.replace(/\\\{[^}]+\\\}/g, "[^/]+");
-		const regex = new RegExp(`^${regexPattern}$`);
-
-		if (regex.test(path)) {
-			return endpointKey;
-		}
-	}
-
-	return null;
-}
+export { extractStringLiterals } from "./extractors.js";
+export { findMatchingEndpoint } from "./path-matcher.js";
 
 export interface AnalyzeOptions {
 	srcPath: string;
@@ -133,33 +13,21 @@ export interface AnalyzeOptions {
 }
 
 /**
- * Analyze TypeScript files to find API calls
+ * TypeScriptファイル群を解析してAPI呼び出し箇所を検出する
+ * @param endpoints - OpenAPIから抽出したエンドポイント一覧
+ * @param options - 解析オプション（ソースパス、tsconfig等）
+ * @returns エンドポイントごとの使用箇所マップ
  */
 export function analyzeTypeScriptFiles(
 	endpoints: Map<string, Set<string>>,
 	options: AnalyzeOptions,
 ): Map<string, Usage[]> {
 	const { srcPath, tsConfigPath } = options;
+	const project = createProject(tsConfigPath);
 
-	const projectOptions: ConstructorParameters<typeof Project>[0] = {
-		skipAddingFilesFromTsConfig: true,
-	};
-
-	if (tsConfigPath) {
-		projectOptions.tsConfigFilePath = tsConfigPath;
-	}
-
-	const project = new Project(projectOptions);
-
-	// Add all TypeScript files
 	project.addSourceFilesAtPaths([`${srcPath}/**/*.ts`, `${srcPath}/**/*.tsx`]);
 
-	const usages = new Map<string, Usage[]>();
-
-	// Initialize usages map with all endpoints
-	for (const key of endpoints.keys()) {
-		usages.set(key, []);
-	}
+	const usages = initializeUsagesMap(endpoints);
 
 	for (const sourceFile of project.getSourceFiles()) {
 		analyzeSourceFile(sourceFile, srcPath, endpoints, usages);
@@ -168,39 +36,56 @@ export function analyzeTypeScriptFiles(
 	return usages;
 }
 
-/**
- * Check if createClient is imported from openapi-fetch
- */
+function createProject(tsConfigPath?: string): Project {
+	const options: ConstructorParameters<typeof Project>[0] = {
+		skipAddingFilesFromTsConfig: true,
+	};
+
+	if (tsConfigPath) {
+		options.tsConfigFilePath = tsConfigPath;
+	}
+
+	return new Project(options);
+}
+
+function initializeUsagesMap(
+	endpoints: Map<string, Set<string>>,
+): Map<string, Usage[]> {
+	const usages = new Map<string, Usage[]>();
+	for (const key of endpoints.keys()) {
+		usages.set(key, []);
+	}
+	return usages;
+}
+
 function isOpenApiFetchImported(sourceFile: SourceFile): boolean {
 	for (const importDecl of sourceFile.getImportDeclarations()) {
-		const moduleSpecifier = importDecl.getModuleSpecifierValue();
-		if (moduleSpecifier === "openapi-fetch") {
-			const namedImports = importDecl.getNamedImports();
-			for (const namedImport of namedImports) {
-				if (namedImport.getName() === "createClient") {
-					return true;
-				}
-			}
-			// Also check default import
-			const defaultImport = importDecl.getDefaultImport();
-			if (defaultImport?.getText() === "createClient") {
+		if (importDecl.getModuleSpecifierValue() !== "openapi-fetch") continue;
+
+		const namedImports = importDecl.getNamedImports();
+		for (const namedImport of namedImports) {
+			if (namedImport.getName() === "createClient") {
 				return true;
 			}
+		}
+
+		const defaultImport = importDecl.getDefaultImport();
+		if (defaultImport?.getText() === "createClient") {
+			return true;
 		}
 	}
 	return false;
 }
 
 /**
- * Find variable names that are assigned from createClient()
- * e.g., const api = createClient<paths>() -> returns ["api"]
+ * ソースファイルからopenapi-fetchのクライアント変数名を検出する
+ * @param sourceFile - 解析対象のソースファイル
+ * @returns クライアント変数名のSet（例: "client", "api"）
  */
 export function findOpenApiFetchClients(sourceFile: SourceFile): Set<string> {
 	const clientNames = new Set<string>();
 
-	// Only look for createClient if it's imported from openapi-fetch
 	if (!isOpenApiFetchImported(sourceFile)) {
-		// Fallback: use "client" as default for backwards compatibility
 		clientNames.add("client");
 		return clientNames;
 	}
@@ -212,14 +97,11 @@ export function findOpenApiFetchClients(sourceFile: SourceFile): Set<string> {
 		if (!initializer || !Node.isCallExpression(initializer)) return;
 
 		const callExpr = initializer.getExpression();
-
-		// Check for createClient() or createClient<T>()
 		if (Node.isIdentifier(callExpr) && callExpr.getText() === "createClient") {
 			clientNames.add(node.getName());
 		}
 	});
 
-	// Fallback: if no createClient call found but import exists
 	if (clientNames.size === 0) {
 		clientNames.add("client");
 	}
@@ -233,9 +115,6 @@ interface ApiCallInfo {
 	line: number;
 }
 
-/**
- * Try to extract API call info from a CallExpression node
- */
 function tryExtractApiCall(
 	node: Node,
 	sourceFile: SourceFile,
@@ -251,13 +130,12 @@ function tryExtractApiCall(
 	const methodName = expression.getName();
 	const objectExpr = expression.getExpression();
 
-	if (
-		!Node.isIdentifier(objectExpr) ||
-		!clientNames.has(objectExpr.getText()) ||
-		!HTTP_METHODS.includes(methodName as HttpMethod)
-	) {
-		return null;
-	}
+	const isValidApiCall =
+		Node.isIdentifier(objectExpr) &&
+		clientNames.has(objectExpr.getText()) &&
+		HTTP_METHODS.includes(methodName as HttpMethod);
+
+	if (!isValidApiCall) return null;
 
 	const args = callExpr.getArguments();
 	if (args.length === 0) return null;
@@ -269,9 +147,6 @@ function tryExtractApiCall(
 	};
 }
 
-/**
- * Record API usage to the usages map
- */
 function recordUsage(
 	key: string,
 	usage: Usage,
@@ -291,7 +166,11 @@ function recordUsage(
 }
 
 /**
- * Analyze a single source file for API calls
+ * 単一のソースファイルを解析してAPI呼び出しを検出する
+ * @param sourceFile - 解析対象のソースファイル
+ * @param srcPath - ソースディレクトリのパス
+ * @param endpoints - OpenAPIエンドポイント一覧
+ * @param usages - 使用箇所を記録するマップ（副作用で更新）
  */
 export function analyzeSourceFile(
 	sourceFile: SourceFile,

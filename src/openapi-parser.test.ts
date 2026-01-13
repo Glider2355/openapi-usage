@@ -1,5 +1,8 @@
-import { describe, expect, it } from "vitest";
-import { parseOpenAPISpec } from "./openapi-parser.js";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { loadOpenAPISpec, parseOpenAPISpec } from "./openapi-parser.js";
 import type { OpenAPISpec } from "./types.js";
 
 describe("parseOpenAPISpec", () => {
@@ -85,5 +88,51 @@ describe("parseOpenAPISpec", () => {
 
 		expect(endpoints.has("GET /users")).toBe(true);
 		expect(endpoints.has("POST /users")).toBe(true);
+	});
+});
+
+describe("loadOpenAPISpec", () => {
+	let tempDir: string;
+
+	beforeEach(() => {
+		tempDir = mkdtempSync(join(tmpdir(), "openapi-test-"));
+	});
+
+	afterEach(() => {
+		rmSync(tempDir, { recursive: true });
+	});
+
+	it("有効なJSONファイルを読み込める", () => {
+		const spec = { paths: { "/users": { get: {} } } };
+		const filePath = join(tempDir, "openapi.json");
+		writeFileSync(filePath, JSON.stringify(spec));
+
+		const result = loadOpenAPISpec(filePath);
+
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(result.spec.paths).toEqual(spec.paths);
+		}
+	});
+
+	it("存在しないファイルでエラーを返す", () => {
+		const result = loadOpenAPISpec(join(tempDir, "nonexistent.json"));
+
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			expect(result.error).toContain("Failed to read OpenAPI spec");
+		}
+	});
+
+	it("無効なJSONでエラーを返す", () => {
+		const filePath = join(tempDir, "invalid.json");
+		writeFileSync(filePath, "{ invalid json }");
+
+		const result = loadOpenAPISpec(filePath);
+
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			expect(result.error).toContain("Invalid JSON");
+		}
 	});
 });

@@ -116,6 +116,30 @@ client.GET("/users");
 		expect(exitCode).toBe(1);
 	});
 
+	it("パスパラメータをマッチングする", () => {
+		writeFileSync(
+			OPENAPI_PATH,
+			JSON.stringify({
+				paths: {
+					"/users/{id}": { get: {} },
+					"/users/{userId}/posts/{postId}": { delete: {} },
+				},
+			}),
+		);
+
+		writeFileSync(
+			join(SRC_DIR, "api.ts"),
+			`
+const client = createClient();
+client.GET("/users/123");
+client.DELETE("/users/456/posts/789");
+`,
+		);
+
+		const { exitCode } = runCLI("--check");
+		expect(exitCode).toBe(0);
+	});
+
 	it("--checkでツリー出力を表示する", () => {
 		writeFileSync(
 			OPENAPI_PATH,
@@ -137,8 +161,31 @@ client.GET("/users");
 
 		const { stdout, exitCode } = runCLI("--check");
 		expect(exitCode).toBe(1);
-		expect(stdout).toContain("GET /users");
-		expect(stdout).toContain("DELETE /posts");
-		expect(stdout).toContain("未使用");
+
+		// ログ行を除去し、ツリー出力部分のみ抽出
+		const treeOutput = stdout
+			.split("\n")
+			.filter(
+				(line) =>
+					!line.startsWith("Parsing") &&
+					!line.startsWith("Found") &&
+					!line.startsWith("Analyzing"),
+			)
+			.join("\n")
+			.replace(/:\d+/g, ""); // 行番号除去
+
+		expect(treeOutput).toMatchInlineSnapshot(`
+			"
+			DELETE /posts
+			└─ (未使用)
+
+			GET /users
+			└─ src/api.ts
+
+			───────────────────────────────────
+			未使用 API: 1件
+			  - DELETE /posts
+			"
+		`);
 	});
 });

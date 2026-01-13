@@ -26,8 +26,6 @@ export interface Usage {
 	line: number;
 }
 
-export type UsageMap = Map<string, Usage[]>;
-
 export interface Endpoint {
 	method: string;
 	path: string;

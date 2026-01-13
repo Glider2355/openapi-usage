@@ -1,103 +1,87 @@
 import type { ApiDependencies, Endpoint, Usage } from "./types.js";
 
-/**
- * Format usages as tree output lines
- */
-export function formatTree(usages: Map<string, Usage[]>): string[] {
-	const lines: string[] = [];
+const sortByKey = <T>(entries: [string, T][]): [string, T][] =>
+	entries.sort((a, b) => a[0].localeCompare(b[0]));
 
-	for (const [key, usageList] of [...usages.entries()].sort((a, b) =>
-		a[0].localeCompare(b[0]),
-	)) {
-		lines.push(key);
-
-		if (usageList.length === 0) {
-			lines.push("└─ (未使用)");
-		} else {
-			usageList.forEach((usage, index) => {
-				const isLast = index === usageList.length - 1;
-				const prefix = isLast ? "└─" : "├─";
-				lines.push(`${prefix} ${usage.file}:${usage.line}`);
-			});
-		}
-		lines.push("");
+const formatUsageLines = (key: string, usages: Usage[]): string[] => {
+	if (usages.length === 0) {
+		return [key, "└─ (未使用)", ""];
 	}
 
-	return lines;
-}
+	const usageLines = usages.map((usage, index) => {
+		const prefix = index === usages.length - 1 ? "└─" : "├─";
+		return `${prefix} ${usage.file}:${usage.line}`;
+	});
+
+	return [key, ...usageLines, ""];
+};
 
 /**
- * Get unused endpoints from usages
+ * API使用状況をツリー形式の文字列配列に変換する
+ * @param usages - エンドポイントごとの使用箇所マップ
+ * @returns ツリー形式の出力行配列
  */
-export function getUnusedEndpoints(usages: Map<string, Usage[]>): string[] {
-	const unused: string[] = [];
+export const formatTree = (usages: Map<string, Usage[]>): string[] =>
+	sortByKey([...usages.entries()]).flatMap(([key, list]) =>
+		formatUsageLines(key, list),
+	);
 
-	for (const [key, usageList] of usages) {
-		if (usageList.length === 0) {
-			unused.push(key);
-		}
+/**
+ * 未使用のエンドポイント一覧を取得する
+ * @param usages - エンドポイントごとの使用箇所マップ
+ * @returns 未使用エンドポイントキーの配列
+ */
+export const getUnusedEndpoints = (usages: Map<string, Usage[]>): string[] =>
+	[...usages.entries()]
+		.filter(([, list]) => list.length === 0)
+		.map(([key]) => key);
+
+/**
+ * 未使用API数のサマリーを文字列配列に変換する
+ * @param usages - エンドポイントごとの使用箇所マップ
+ * @returns サマリー出力行配列
+ */
+export const formatSummary = (usages: Map<string, Usage[]>): string[] => {
+	const unused = getUnusedEndpoints(usages);
+	const separator = "─".repeat(35);
+
+	if (unused.length === 0) {
+		return [separator, "未使用 API: 0件"];
 	}
 
-	return unused;
-}
+	return [
+		separator,
+		`未使用 API: ${unused.length}件`,
+		...unused.map((endpoint) => `  - ${endpoint}`),
+	];
+};
 
 /**
- * Format summary output lines
+ * API使用状況をJSON出力用のオブジェクトに変換する
+ * @param usages - エンドポイントごとの使用箇所マップ
+ * @param generatedAt - 生成日時（省略時は現在時刻）
+ * @returns JSON出力用のApiDependenciesオブジェクト
  */
-export function formatSummary(usages: Map<string, Usage[]>): string[] {
-	const lines: string[] = [];
-	const unusedEndpoints = getUnusedEndpoints(usages);
-
-	lines.push("─".repeat(35));
-
-	if (unusedEndpoints.length === 0) {
-		lines.push("未使用 API: 0件");
-	} else {
-		lines.push(`未使用 API: ${unusedEndpoints.length}件`);
-		for (const endpoint of unusedEndpoints) {
-			lines.push(`  - ${endpoint}`);
-		}
-	}
-
-	return lines;
-}
-
-/**
- * Generate JSON output structure
- */
-export function generateJsonOutput(
+export const generateJsonOutput = (
 	usages: Map<string, Usage[]>,
-	generatedAt?: Date,
-): ApiDependencies {
-	const endpoints: Endpoint[] = [];
-	let used = 0;
-	let unused = 0;
+	generatedAt: Date = new Date(),
+): ApiDependencies => {
+	const entries = sortByKey([...usages.entries()]);
 
-	for (const [key, usageList] of [...usages.entries()].sort((a, b) =>
-		a[0].localeCompare(b[0]),
-	)) {
+	const endpoints: Endpoint[] = entries.map(([key, usageList]) => {
 		const [method, path] = key.split(" ", 2);
+		return { method, path, usages: usageList };
+	});
 
-		endpoints.push({
-			method,
-			path,
-			usages: usageList,
-		});
-
-		if (usageList.length > 0) {
-			used++;
-		} else {
-			unused++;
-		}
-	}
+	const used = entries.filter(([, list]) => list.length > 0).length;
 
 	return {
-		generated_at: (generatedAt ?? new Date()).toISOString(),
+		generated_at: generatedAt.toISOString(),
 		endpoints,
 		summary: {
 			total: endpoints.length,
 			used,
-			unused,
+			unused: endpoints.length - used,
 		},
 	};
-}
+};
