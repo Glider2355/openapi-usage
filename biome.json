@@ -10,13 +10,20 @@
 	},
 	"formatter": {
 		"enabled": true,
-		"indentStyle": "tab"
+		"indentStyle": "tab",
+		"includes": [
+			"**/*.ts",
+			"**/*.tsx",
+			"**/*.json",
+			"!integration-test/fixtures/**"
+		]
 	},
 	"linter": {
 		"enabled": true,
 		"rules": {
 			"recommended": true
-		}
+		},
+		"includes": ["**/*.ts", "**/*.tsx", "!integration-test/fixtures/**"]
 	},
 	"javascript": {
 		"formatter": {
