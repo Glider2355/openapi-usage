@@ -1,10 +1,5 @@
 import { relative, resolve } from "node:path";
-import {
-	type CallExpression,
-	Node,
-	Project,
-	type SourceFile,
-} from "ts-morph";
+import { type CallExpression, Node, Project, type SourceFile } from "ts-morph";
 import { HTTP_METHODS, type HttpMethod, type Usage } from "./types.js";
 
 /**
@@ -74,7 +69,7 @@ export function extractStringLiterals(node: Node): string[] {
  */
 export function findMatchingEndpoint(
 	key: string,
-	endpoints: Map<string, Set<string>>
+	endpoints: Map<string, Set<string>>,
 ): string | null {
 	const [method, path] = key.split(" ", 2);
 
@@ -106,7 +101,7 @@ export interface AnalyzeOptions {
  */
 export function analyzeTypeScriptFiles(
 	endpoints: Map<string, Set<string>>,
-	options: AnalyzeOptions
+	options: AnalyzeOptions,
 ): Map<string, Usage[]> {
 	const { srcPath, tsConfigPath } = options;
 
@@ -144,7 +139,7 @@ export function analyzeSourceFile(
 	sourceFile: SourceFile,
 	srcPath: string,
 	endpoints: Map<string, Set<string>>,
-	usages: Map<string, Usage[]>
+	usages: Map<string, Usage[]>,
 ): void {
 	const filePath = sourceFile.getFilePath();
 	const relativeFilePath = relative(resolve(srcPath, ".."), filePath);
@@ -182,20 +177,17 @@ export function analyzeSourceFile(
 		for (const pathValue of pathValues) {
 			const key = `${methodName} ${pathValue}`;
 
-			if (usages.has(key)) {
-				usages.get(key)!.push({
-					file: relativeFilePath,
-					line,
-				});
+			const usage = { file: relativeFilePath, line };
+			const existingUsages = usages.get(key);
+
+			if (existingUsages) {
+				existingUsages.push(usage);
 			} else {
 				// Path might have different parameter format
 				// Try to match with OpenAPI path patterns
 				const matchedKey = findMatchingEndpoint(key, endpoints);
 				if (matchedKey) {
-					usages.get(matchedKey)!.push({
-						file: relativeFilePath,
-						line,
-					});
+					usages.get(matchedKey)?.push(usage);
 				}
 			}
 		}

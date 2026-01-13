@@ -1,31 +1,27 @@
-import { describe, expect, it } from "vitest";
 import { Project } from "ts-morph";
+import { describe, expect, it } from "vitest";
 import {
+	analyzeSourceFile,
 	extractStringLiterals,
 	findMatchingEndpoint,
-	analyzeSourceFile,
 } from "./analyzer.js";
 
 describe("extractStringLiterals", () => {
 	const project = new Project({ useInMemoryFileSystem: true });
 
 	it("should extract string literal", () => {
-		const source = project.createSourceFile(
-			"test1.ts",
-			'const x = "/users";',
-			{ overwrite: true }
-		);
+		const source = project.createSourceFile("test1.ts", 'const x = "/users";', {
+			overwrite: true,
+		});
 		const varDecl = source.getVariableDeclarationOrThrow("x");
 		const init = varDecl.getInitializerOrThrow();
 		expect(extractStringLiterals(init)).toEqual(["/users"]);
 	});
 
 	it("should extract template literal without substitutions", () => {
-		const source = project.createSourceFile(
-			"test2.ts",
-			"const x = `/users`;",
-			{ overwrite: true }
-		);
+		const source = project.createSourceFile("test2.ts", "const x = `/users`;", {
+			overwrite: true,
+		});
 		const varDecl = source.getVariableDeclarationOrThrow("x");
 		const init = varDecl.getInitializerOrThrow();
 		expect(extractStringLiterals(init)).toEqual(["/users"]);
@@ -35,7 +31,7 @@ describe("extractStringLiterals", () => {
 		const source = project.createSourceFile(
 			"test3.ts",
 			'const x = true ? "/a" : "/b";',
-			{ overwrite: true }
+			{ overwrite: true },
 		);
 		const varDecl = source.getVariableDeclarationOrThrow("x");
 		const init = varDecl.getInitializerOrThrow();
@@ -46,7 +42,7 @@ describe("extractStringLiterals", () => {
 		const source = project.createSourceFile(
 			"test4.ts",
 			'const x = ("/users");',
-			{ overwrite: true }
+			{ overwrite: true },
 		);
 		const varDecl = source.getVariableDeclarationOrThrow("x");
 		const init = varDecl.getInitializerOrThrow();
@@ -57,7 +53,7 @@ describe("extractStringLiterals", () => {
 		const source = project.createSourceFile(
 			"test5.ts",
 			'const x = "/users" as const;',
-			{ overwrite: true }
+			{ overwrite: true },
 		);
 		const varDecl = source.getVariableDeclarationOrThrow("x");
 		const init = varDecl.getInitializerOrThrow();
@@ -68,7 +64,7 @@ describe("extractStringLiterals", () => {
 		const source = project.createSourceFile(
 			"test6.ts",
 			"const x = getPath();",
-			{ overwrite: true }
+			{ overwrite: true },
 		);
 		const varDecl = source.getVariableDeclarationOrThrow("x");
 		const init = varDecl.getInitializerOrThrow();
@@ -94,11 +90,11 @@ describe("findMatchingEndpoint", () => {
 		]);
 
 		expect(findMatchingEndpoint("GET /users/123", endpoints)).toBe(
-			"GET /users/{id}"
+			"GET /users/{id}",
 		);
-		expect(
-			findMatchingEndpoint("DELETE /users/123/posts/456", endpoints)
-		).toBe("DELETE /users/{id}/posts/{postId}");
+		expect(findMatchingEndpoint("DELETE /users/123/posts/456", endpoints)).toBe(
+			"DELETE /users/{id}/posts/{postId}",
+		);
 	});
 
 	it("should return null for non-matching method", () => {
@@ -125,7 +121,7 @@ const client = createClient();
 client.GET("/users");
 client.POST("/users");
 `,
-			{ overwrite: true }
+			{ overwrite: true },
 		);
 
 		const endpoints = new Map([
@@ -150,7 +146,7 @@ client.POST("/users");
 const client = createClient();
 client.GET("/users/123");
 `,
-			{ overwrite: true }
+			{ overwrite: true },
 		);
 
 		const endpoints = new Map([["GET /users/{id}", new Set<string>()]]);
@@ -170,7 +166,7 @@ client.GET("/users/123");
 const api = createClient();
 api.GET("/users");
 `,
-			{ overwrite: true }
+			{ overwrite: true },
 		);
 
 		const endpoints = new Map([["GET /users", new Set<string>()]]);

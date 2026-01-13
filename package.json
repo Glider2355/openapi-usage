@@ -1,24 +1,25 @@
 {
-  "name": "openapi-usage",
-  "version": "1.0.0",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "start": "tsx src/index.ts --openapi ../../docs/openapi/openapi.json --src ../../packages/frontend/src --output ../../docs/openapi/api-dependencies.json",
-    "check": "tsx src/index.ts --openapi ../../docs/openapi/openapi.json --src ../../packages/frontend/src --check",
-    "test": "vitest",
-    "lint": "biome check .",
-    "format": "biome check --write ."
-  },
-  "dependencies": {
-    "commander": "^13.1.0",
-    "ts-morph": "^25.0.1"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "^2.3.11",
-    "@types/node": "^22.15.29",
-    "tsx": "^4.19.4",
-    "typescript": "^5.9.2",
-    "vitest": "^4.0.17"
-  }
+	"name": "openapi-usage",
+	"version": "1.0.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"start": "tsx src/index.ts --openapi ../../docs/openapi/openapi.json --src ../../packages/frontend/src --output ../../docs/openapi/api-dependencies.json",
+		"check": "tsx src/index.ts --openapi ../../docs/openapi/openapi.json --src ../../packages/frontend/src --check",
+		"test": "vitest",
+		"lint": "biome check .",
+		"format": "biome check --write ."
+	},
+	"dependencies": {
+		"commander": "^13.1.0",
+		"ts-morph": "^25.0.1"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.3.11",
+		"@types/node": "^22.15.29",
+		"lefthook": "^2.0.15",
+		"tsx": "^4.19.4",
+		"typescript": "^5.9.2",
+		"vitest": "^4.0.17"
+	}
 }
