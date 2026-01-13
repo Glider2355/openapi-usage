@@ -52,42 +52,13 @@ client.GET(`${base}/${id}`);
 > **Note:** 検知できないパターンは `openapi-fetch` の型安全性も失われます。
 > パスパラメータは `params.path` で渡す方法を推奨します。
 
-## 使い方
-
-### 依存関係JSONの生成
-
-```bash
-pnpm --filter openapi-usage start
-```
-
-`docs/openapi/api-dependencies.json` に依存関係が出力されます。
-
-### 未使用API検知（CIチェック用）
-
-```bash
-pnpm --filter openapi-usage check
-```
-
-未使用APIがあれば exit 1 で終了します。
-
-### ルートからの実行
-
-```bash
-# OpenAPI仕様取得 + 依存関係生成
-pnpm run gen:openapi      # サーバー起動中に実行
-pnpm run gen:dependencies
-
-# 未使用APIチェック
-pnpm run lint:api
-```
-
 ## CLI オプション
 
 ```bash
 openapi-usage --openapi <path> --src <path> [options]
 
 必須:
-  -o, --openapi <path>  OpenAPI仕様ファイルのパス
+  -o, --openapi <path>  OpenAPI仕様ファイル(json)のパス
   -s, --src <path>      解析対象ディレクトリ
 
 オプション:

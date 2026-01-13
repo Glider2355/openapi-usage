@@ -3,7 +3,7 @@ import { parseOpenAPISpec } from "./openapi-parser.js";
 import type { OpenAPISpec } from "./types.js";
 
 describe("parseOpenAPISpec", () => {
-	it("should extract endpoints from OpenAPI spec", () => {
+	it("OpenAPIスペックからエンドポイントを抽出する", () => {
 		const spec: OpenAPISpec = {
 			paths: {
 				"/users": {
@@ -26,13 +26,13 @@ describe("parseOpenAPISpec", () => {
 		expect(endpoints.has("DELETE /users/{id}")).toBe(true);
 	});
 
-	it("should handle empty paths", () => {
+	it("空のpathsを処理できる", () => {
 		const spec: OpenAPISpec = { paths: {} };
 		const endpoints = parseOpenAPISpec(spec);
 		expect(endpoints.size).toBe(0);
 	});
 
-	it("should ignore non-HTTP methods", () => {
+	it("HTTPメソッド以外のプロパティを無視する", () => {
 		const spec: OpenAPISpec = {
 			paths: {
 				"/users": {
@@ -48,7 +48,7 @@ describe("parseOpenAPISpec", () => {
 		expect(endpoints.has("GET /users")).toBe(true);
 	});
 
-	it("should handle all HTTP methods", () => {
+	it("全てのHTTPメソッドを処理できる", () => {
 		const spec: OpenAPISpec = {
 			paths: {
 				"/resource": {
@@ -71,7 +71,7 @@ describe("parseOpenAPISpec", () => {
 		expect(endpoints.has("PATCH /resource")).toBe(true);
 	});
 
-	it("should convert method to uppercase", () => {
+	it("メソッドを大文字に変換する", () => {
 		const spec: OpenAPISpec = {
 			paths: {
 				"/users": {

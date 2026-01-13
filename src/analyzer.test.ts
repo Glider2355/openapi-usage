@@ -9,7 +9,7 @@ import {
 describe("extractStringLiterals", () => {
 	const project = new Project({ useInMemoryFileSystem: true });
 
-	it("should extract string literal", () => {
+	it("文字列リテラルを抽出できる", () => {
 		const source = project.createSourceFile("test1.ts", 'const x = "/users";', {
 			overwrite: true,
 		});
@@ -18,7 +18,7 @@ describe("extractStringLiterals", () => {
 		expect(extractStringLiterals(init)).toEqual(["/users"]);
 	});
 
-	it("should extract template literal without substitutions", () => {
+	it("変数なしのテンプレートリテラルを抽出できる", () => {
 		const source = project.createSourceFile("test2.ts", "const x = `/users`;", {
 			overwrite: true,
 		});
@@ -27,7 +27,7 @@ describe("extractStringLiterals", () => {
 		expect(extractStringLiterals(init)).toEqual(["/users"]);
 	});
 
-	it("should extract from ternary expression", () => {
+	it("三項演算子から両方の値を抽出できる", () => {
 		const source = project.createSourceFile(
 			"test3.ts",
 			'const x = true ? "/a" : "/b";',
@@ -38,7 +38,7 @@ describe("extractStringLiterals", () => {
 		expect(extractStringLiterals(init)).toEqual(["/a", "/b"]);
 	});
 
-	it("should extract from parenthesized expression", () => {
+	it("括弧で囲まれた式から抽出できる", () => {
 		const source = project.createSourceFile(
 			"test4.ts",
 			'const x = ("/users");',
@@ -49,7 +49,7 @@ describe("extractStringLiterals", () => {
 		expect(extractStringLiterals(init)).toEqual(["/users"]);
 	});
 
-	it("should extract from as expression", () => {
+	it("as式から抽出できる", () => {
 		const source = project.createSourceFile(
 			"test5.ts",
 			'const x = "/users" as const;',
@@ -60,7 +60,7 @@ describe("extractStringLiterals", () => {
 		expect(extractStringLiterals(init)).toEqual(["/users"]);
 	});
 
-	it("should return empty array for complex expressions", () => {
+	it("複雑な式の場合は空配列を返す", () => {
 		const source = project.createSourceFile(
 			"test6.ts",
 			"const x = getPath();",
@@ -73,7 +73,7 @@ describe("extractStringLiterals", () => {
 });
 
 describe("findMatchingEndpoint", () => {
-	it("should find exact match", () => {
+	it("完全一致するエンドポイントを見つける", () => {
 		const endpoints = new Map([
 			["GET /users", new Set<string>()],
 			["POST /users", new Set<string>()],
@@ -83,7 +83,7 @@ describe("findMatchingEndpoint", () => {
 		expect(findMatchingEndpoint("POST /users", endpoints)).toBe("POST /users");
 	});
 
-	it("should match path parameters", () => {
+	it("パスパラメータを含むエンドポイントにマッチする", () => {
 		const endpoints = new Map([
 			["GET /users/{id}", new Set<string>()],
 			["DELETE /users/{id}/posts/{postId}", new Set<string>()],
@@ -97,13 +97,13 @@ describe("findMatchingEndpoint", () => {
 		);
 	});
 
-	it("should return null for non-matching method", () => {
+	it("メソッドが一致しない場合はnullを返す", () => {
 		const endpoints = new Map([["GET /users", new Set<string>()]]);
 
 		expect(findMatchingEndpoint("POST /users", endpoints)).toBe(null);
 	});
 
-	it("should return null for non-matching path", () => {
+	it("パスが一致しない場合はnullを返す", () => {
 		const endpoints = new Map([["GET /users", new Set<string>()]]);
 
 		expect(findMatchingEndpoint("GET /posts", endpoints)).toBe(null);
@@ -113,7 +113,7 @@ describe("findMatchingEndpoint", () => {
 describe("analyzeSourceFile", () => {
 	const project = new Project({ useInMemoryFileSystem: true });
 
-	it("should find client.GET calls", () => {
+	it("client.GET呼び出しを検出する", () => {
 		const source = project.createSourceFile(
 			"/src/test.ts",
 			`
@@ -139,7 +139,7 @@ client.POST("/users");
 		expect(usages.get("POST /users")).toHaveLength(1);
 	});
 
-	it("should match path parameters", () => {
+	it("パスパラメータを含むパスにマッチする", () => {
 		const source = project.createSourceFile(
 			"/src/test.ts",
 			`
@@ -159,7 +159,7 @@ client.GET("/users/123");
 		expect(usages.get("GET /users/{id}")).toHaveLength(1);
 	});
 
-	it("should ignore non-openapi-fetch calls", () => {
+	it("openapi-fetch以外の呼び出しは無視する", () => {
 		const source = project.createSourceFile(
 			"/src/test.ts",
 			`
@@ -179,10 +179,11 @@ axios.GET("/users");
 		expect(usages.get("GET /users")).toHaveLength(0);
 	});
 
-	it("should detect createClient variable with custom name", () => {
+	it("カスタム名のcreateClient変数を検出する", () => {
 		const source = project.createSourceFile(
 			"/src/test.ts",
 			`
+import { createClient } from "openapi-fetch";
 const api = createClient();
 api.GET("/users");
 `,

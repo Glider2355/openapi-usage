@@ -21,7 +21,7 @@ function runCLI(args: string): { exitCode: number; stdout: string } {
 	}
 }
 
-describe("CLI E2E", () => {
+describe("CLI E2Eテスト", () => {
 	beforeEach(() => {
 		mkdirSync(SRC_DIR, { recursive: true });
 		// Create minimal tsconfig.json required by ts-morph
@@ -35,7 +35,7 @@ describe("CLI E2E", () => {
 		rmSync(TEST_DIR, { recursive: true, force: true });
 	});
 
-	it("should exit 0 when all APIs are used", () => {
+	it("全てのAPIが使用されている場合はexit 0で終了する", () => {
 		writeFileSync(
 			OPENAPI_PATH,
 			JSON.stringify({
@@ -57,7 +57,7 @@ client.GET("/users");
 		expect(exitCode).toBe(0);
 	});
 
-	it("should exit 1 when there are unused APIs", () => {
+	it("未使用のAPIがある場合はexit 1で終了する", () => {
 		writeFileSync(
 			OPENAPI_PATH,
 			JSON.stringify({
@@ -80,7 +80,7 @@ client.GET("/users");
 		expect(exitCode).toBe(1);
 	});
 
-	it("should generate JSON output file", () => {
+	it("JSON出力ファイルを生成する", () => {
 		writeFileSync(
 			OPENAPI_PATH,
 			JSON.stringify({
@@ -109,14 +109,14 @@ client.GET("/users");
 		expect(output.endpoints[0].path).toBe("/users");
 	});
 
-	it("should exit 1 when openapi file not found", () => {
+	it("OpenAPIファイルが見つからない場合はexit 1で終了する", () => {
 		writeFileSync(join(SRC_DIR, "api.ts"), "");
 
 		const { exitCode } = runCLI("--check");
 		expect(exitCode).toBe(1);
 	});
 
-	it("should show tree output with --check", () => {
+	it("--checkでツリー出力を表示する", () => {
 		writeFileSync(
 			OPENAPI_PATH,
 			JSON.stringify({

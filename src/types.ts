@@ -1,11 +1,32 @@
+export interface OpenAPIOperation {
+	summary?: string;
+	description?: string;
+	operationId?: string;
+	parameters?: unknown[];
+	requestBody?: unknown;
+	responses?: Record<string, unknown>;
+	[key: string]: unknown;
+}
+
+export interface OpenAPIPathItem {
+	get?: OpenAPIOperation;
+	post?: OpenAPIOperation;
+	put?: OpenAPIOperation;
+	delete?: OpenAPIOperation;
+	patch?: OpenAPIOperation;
+	[key: string]: unknown;
+}
+
 export interface OpenAPISpec {
-	paths: Record<string, Record<string, unknown>>;
+	paths: Record<string, OpenAPIPathItem>;
 }
 
 export interface Usage {
 	file: string;
 	line: number;
 }
+
+export type UsageMap = Map<string, Usage[]>;
 
 export interface Endpoint {
 	method: string;

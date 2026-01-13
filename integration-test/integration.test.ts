@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { analyzeTypeScriptFiles } from "../src/analyzer.js";
@@ -11,10 +11,19 @@ import {
 } from "../src/output.js";
 import type { OpenAPISpec } from "../src/types.js";
 
+const FIXTURES_DIR = join(import.meta.dirname, "fixtures");
 const TEST_DIR = join(import.meta.dirname, "../.test-fixtures");
 const SRC_DIR = join(TEST_DIR, "src");
 
-describe("Integration", () => {
+function loadFixture(path: string): string {
+	return readFileSync(join(FIXTURES_DIR, path), "utf-8");
+}
+
+function loadJsonFixture<T>(path: string): T {
+	return JSON.parse(loadFixture(path));
+}
+
+describe("統合テスト", () => {
 	beforeEach(() => {
 		mkdirSync(SRC_DIR, { recursive: true });
 	});
@@ -23,7 +32,7 @@ describe("Integration", () => {
 		rmSync(TEST_DIR, { recursive: true, force: true });
 	});
 
-	it("should detect used and unused APIs", () => {
+	it("使用中と未使用のAPIを検出する", () => {
 		// Setup: OpenAPI spec
 		const spec: OpenAPISpec = {
 			paths: {
@@ -78,7 +87,7 @@ export async function getUser(id: string) {
 		expect(unused).toEqual(["DELETE /users/{id}", "GET /posts"]);
 	});
 
-	it("should match dynamic path parameters", () => {
+	it("動的パスパラメータにマッチする", () => {
 		const spec: OpenAPISpec = {
 			paths: {
 				"/users/{userId}/posts/{postId}": {
@@ -101,7 +110,7 @@ client.GET("/users/123/posts/456");
 		expect(usages.get("GET /users/{userId}/posts/{postId}")).toHaveLength(1);
 	});
 
-	it("should handle ternary expressions", () => {
+	it("三項演算子を処理する", () => {
 		const spec: OpenAPISpec = {
 			paths: {
 				"/users": { get: {} },
@@ -125,7 +134,7 @@ client.GET(isAdmin ? "/admins" : "/users");
 		expect(usages.get("GET /admins")).toHaveLength(1);
 	});
 
-	it("should handle multiple files", () => {
+	it("複数ファイルを処理する", () => {
 		const spec: OpenAPISpec = {
 			paths: {
 				"/users": { get: {} },
@@ -158,7 +167,7 @@ client.GET("/posts");
 		expect(usages.get("GET /comments")).toHaveLength(0);
 	});
 
-	it("should generate correct JSON output", () => {
+	it("正しいJSON出力を生成する", () => {
 		const spec: OpenAPISpec = {
 			paths: {
 				"/users": { get: {}, post: {} },
@@ -191,7 +200,7 @@ client.GET("/users");
 		).toHaveLength(0);
 	});
 
-	it("should format tree output correctly", () => {
+	it("ツリー出力を正しくフォーマットする", () => {
 		const spec: OpenAPISpec = {
 			paths: {
 				"/users": { get: {} },
@@ -218,7 +227,7 @@ client.GET("/users");
 		expect(summary.some((line) => line.includes("未使用 API: 1件"))).toBe(true);
 	});
 
-	it("should handle tsx files", () => {
+	it("tsxファイルを処理する", () => {
 		const spec: OpenAPISpec = {
 			paths: {
 				"/users": { get: {} },
@@ -244,7 +253,7 @@ export function UserList() {
 		expect(usages.get("GET /users")?.[0].file).toContain("Component.tsx");
 	});
 
-	it("should track line numbers correctly", () => {
+	it("行番号を正しく追跡する", () => {
 		const spec: OpenAPISpec = {
 			paths: {
 				"/users": { get: {} },
@@ -266,7 +275,7 @@ client.GET("/users"); // line 4
 		expect(usages.get("GET /users")?.[0].line).toBe(4);
 	});
 
-	it("should detect custom client names from createClient", () => {
+	it("createClientからカスタムクライアント名を検出する", () => {
 		const spec: OpenAPISpec = {
 			paths: {
 				"/users": { get: {} },
@@ -294,7 +303,7 @@ httpClient.GET("/posts");
 		expect(usages.get("GET /posts")).toHaveLength(1);
 	});
 
-	it("should ignore non-createClient objects", () => {
+	it("createClient以外のオブジェクトを無視する", () => {
 		const spec: OpenAPISpec = {
 			paths: {
 				"/users": { get: {} },
@@ -313,5 +322,50 @@ axios.GET("/users");
 		const usages = analyzeTypeScriptFiles(endpoints, { srcPath: SRC_DIR });
 
 		expect(usages.get("GET /users")).toHaveLength(0);
+	});
+});
+
+describe("Fixtureを使った統合テスト", () => {
+	it("fixtureディレクトリのソースファイルを解析できる", () => {
+		const spec = loadJsonFixture<OpenAPISpec>("openapi.json");
+		const fixturesSrcDir = join(FIXTURES_DIR, "src");
+
+		const endpoints = parseOpenAPISpec(spec);
+		const usages = analyzeTypeScriptFiles(endpoints, {
+			srcPath: fixturesSrcDir,
+		});
+
+		// api.tsで使用されているエンドポイント
+		expect(usages.get("GET /users")).toHaveLength(3); // api.ts + posts.ts (三項演算子) + UserList.tsx
+		expect(usages.get("POST /users")).toHaveLength(1);
+		expect(usages.get("GET /users/{id}")).toHaveLength(1);
+
+		// posts.tsで使用されているエンドポイント
+		expect(usages.get("GET /posts")).toHaveLength(2); // posts.ts + api.ts (三項演算子)
+		expect(usages.get("POST /posts")).toHaveLength(1);
+		expect(usages.get("GET /users/{userId}/posts/{postId}")).toHaveLength(1);
+
+		// 未使用のエンドポイント
+		expect(usages.get("PUT /users/{id}")).toHaveLength(0);
+		expect(usages.get("DELETE /users/{id}")).toHaveLength(0);
+		expect(usages.get("GET /posts/{id}")).toHaveLength(0);
+		expect(usages.get("DELETE /posts/{id}")).toHaveLength(0);
+	});
+
+	it("fixtureのOpenAPIスペックを正しくパースできる", () => {
+		const spec = loadJsonFixture<OpenAPISpec>("openapi.json");
+		const endpoints = parseOpenAPISpec(spec);
+
+		expect(endpoints.size).toBe(10);
+		expect(endpoints.has("GET /users")).toBe(true);
+		expect(endpoints.has("POST /users")).toBe(true);
+		expect(endpoints.has("GET /users/{id}")).toBe(true);
+		expect(endpoints.has("PUT /users/{id}")).toBe(true);
+		expect(endpoints.has("DELETE /users/{id}")).toBe(true);
+		expect(endpoints.has("GET /posts")).toBe(true);
+		expect(endpoints.has("POST /posts")).toBe(true);
+		expect(endpoints.has("GET /posts/{id}")).toBe(true);
+		expect(endpoints.has("DELETE /posts/{id}")).toBe(true);
+		expect(endpoints.has("GET /users/{userId}/posts/{postId}")).toBe(true);
 	});
 });

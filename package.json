@@ -4,8 +4,6 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"start": "tsx src/index.ts --openapi ../../docs/openapi/openapi.json --src ../../packages/frontend/src --output ../../docs/openapi/api-dependencies.json",
-		"check": "tsx src/index.ts --openapi ../../docs/openapi/openapi.json --src ../../packages/frontend/src --check",
 		"test": "vitest",
 		"lint": "biome check .",
 		"format": "biome check --write ."

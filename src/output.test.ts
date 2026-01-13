@@ -7,7 +7,7 @@ import {
 } from "./output.js";
 
 describe("formatTree", () => {
-	it("should format usages as tree", () => {
+	it("使用状況をツリー形式でフォーマットする", () => {
 		const usages = new Map([
 			["GET /users", [{ file: "src/pages/Users.tsx", line: 42 }]],
 			["POST /users", []],
@@ -21,7 +21,7 @@ describe("formatTree", () => {
 		expect(lines).toContain("└─ (未使用)");
 	});
 
-	it("should show multiple usages with correct prefixes", () => {
+	it("複数の使用箇所を正しいプレフィックスで表示する", () => {
 		const usages = new Map([
 			[
 				"GET /users",
@@ -38,7 +38,7 @@ describe("formatTree", () => {
 		expect(lines).toContain("└─ src/b.ts:2");
 	});
 
-	it("should sort keys alphabetically", () => {
+	it("キーをアルファベット順にソートする", () => {
 		const usages = new Map([
 			["POST /users", []],
 			["GET /users", []],
@@ -56,7 +56,7 @@ describe("formatTree", () => {
 });
 
 describe("getUnusedEndpoints", () => {
-	it("should return unused endpoints", () => {
+	it("未使用のエンドポイントを返す", () => {
 		const usages = new Map([
 			["GET /users", [{ file: "src/a.ts", line: 1 }]],
 			["POST /users", []],
@@ -68,7 +68,7 @@ describe("getUnusedEndpoints", () => {
 		expect(unused).toEqual(["POST /users", "DELETE /users"]);
 	});
 
-	it("should return empty array when all used", () => {
+	it("全て使用済みの場合は空配列を返す", () => {
 		const usages = new Map([["GET /users", [{ file: "src/a.ts", line: 1 }]]]);
 
 		const unused = getUnusedEndpoints(usages);
@@ -78,7 +78,7 @@ describe("getUnusedEndpoints", () => {
 });
 
 describe("formatSummary", () => {
-	it("should show 0 when no unused", () => {
+	it("未使用がない場合は0件と表示する", () => {
 		const usages = new Map([["GET /users", [{ file: "src/a.ts", line: 1 }]]]);
 
 		const lines = formatSummary(usages);
@@ -86,7 +86,7 @@ describe("formatSummary", () => {
 		expect(lines).toContain("未使用 API: 0件");
 	});
 
-	it("should list unused endpoints", () => {
+	it("未使用のエンドポイントを一覧表示する", () => {
 		const usages = new Map([
 			["GET /users", []],
 			["POST /users", []],
@@ -101,7 +101,7 @@ describe("formatSummary", () => {
 });
 
 describe("generateJsonOutput", () => {
-	it("should generate correct JSON structure", () => {
+	it("正しいJSON構造を生成する", () => {
 		const usages = new Map([
 			["GET /users", [{ file: "src/a.ts", line: 1 }]],
 			["POST /users", []],
@@ -119,7 +119,7 @@ describe("generateJsonOutput", () => {
 		});
 	});
 
-	it("should split method and path correctly", () => {
+	it("メソッドとパスを正しく分割する", () => {
 		const usages = new Map([["GET /users/{id}", []]]);
 		const date = new Date("2024-01-01T00:00:00Z");
 

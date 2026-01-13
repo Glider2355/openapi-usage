@@ -9,7 +9,7 @@ import {
 	generateJsonOutput,
 	getUnusedEndpoints,
 } from "./output.js";
-import type { OpenAPISpec } from "./types.js";
+import type { OpenAPISpec, Usage } from "./types.js";
 
 const program = new Command();
 
@@ -47,8 +47,20 @@ if (!existsSync(srcPath)) {
 
 // Parse OpenAPI spec
 console.log(`Parsing OpenAPI spec: ${openapiPath}`);
-const content = readFileSync(openapiPath, "utf-8");
-const spec: OpenAPISpec = JSON.parse(content);
+let spec: OpenAPISpec;
+try {
+	const content = readFileSync(openapiPath, "utf-8");
+	spec = JSON.parse(content);
+} catch (error) {
+	if (error instanceof SyntaxError) {
+		console.error(`Error: Invalid JSON in OpenAPI spec: ${error.message}`);
+	} else {
+		console.error(
+			`Error: Failed to read OpenAPI spec: ${error instanceof Error ? error.message : String(error)}`,
+		);
+	}
+	process.exit(1);
+}
 const endpoints = parseOpenAPISpec(spec);
 console.log(`Found ${endpoints.size} endpoints`);
 
@@ -56,7 +68,6 @@ console.log(`Found ${endpoints.size} endpoints`);
 console.log(`Analyzing source files: ${srcPath}`);
 const usages = analyzeTypeScriptFiles(endpoints, {
 	srcPath,
-	tsConfigPath: resolve(srcPath, "../tsconfig.json"),
 });
 
 // Output
@@ -73,7 +84,7 @@ if (options.output) {
 	console.log(`Output written to: ${outputPath}`);
 }
 
-if (options.check) {
+function printUsageReport(usages: Map<string, Usage[]>): void {
 	console.log();
 	for (const line of formatTree(usages)) {
 		console.log(line);
@@ -81,17 +92,15 @@ if (options.check) {
 	for (const line of formatSummary(usages)) {
 		console.log(line);
 	}
+}
+
+if (options.check) {
+	printUsageReport(usages);
 	const exitCode = getUnusedEndpoints(usages).length > 0 ? 1 : 0;
 	process.exit(exitCode);
 }
 
 // Default: just output the tree format if no output option specified
 if (!options.output && !options.check) {
-	console.log();
-	for (const line of formatTree(usages)) {
-		console.log(line);
-	}
-	for (const line of formatSummary(usages)) {
-		console.log(line);
-	}
+	printUsageReport(usages);
 }
