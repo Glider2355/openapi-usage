@@ -26,6 +26,7 @@ describe("extractStringLiterals", () => {
 	it("テンプレート式をOpenAPIパスパターンに変換できる", () => {
 		const source = project.createSourceFile(
 			"test-template.ts",
+			// biome-ignore lint/suspicious/noTemplateCurlyInString: テスト用のソースコード文字列
 			"const id = 123; const x = `/users/${id}`;",
 			{ overwrite: true },
 		);
@@ -37,6 +38,7 @@ describe("extractStringLiterals", () => {
 	it("複数のテンプレート式を変換できる", () => {
 		const source = project.createSourceFile(
 			"test-multi-template.ts",
+			// biome-ignore lint/suspicious/noTemplateCurlyInString: テスト用のソースコード文字列
 			"const userId = 1; const postId = 2; const x = `/users/${userId}/posts/${postId}`;",
 			{ overwrite: true },
 		);
