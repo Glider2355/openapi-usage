@@ -54,7 +54,7 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
-		"commander": "^13.1.0",
+		"commander": "^14.0.2",
 		"ts-morph": "^25.0.1"
 	},
 	"devDependencies": {
