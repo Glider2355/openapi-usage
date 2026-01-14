@@ -2,59 +2,22 @@ name: Release
 
 on:
   push:
-    branches: [main]
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+    tags:
+      - "v*"
 
 jobs:
-  release:
-    name: Release
+  create-release:
+    name: Create Draft Release
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: write
-      id-token: write
     steps:
       - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 20
-          cache: pnpm
-          registry-url: "https://registry.npmjs.org"
-
-      - run: pnpm install --frozen-lockfile
-
-      - name: Create Release Pull Request or Publish
-        id: changesets
-        uses: changesets/action@v1
-        with:
-          version: pnpm changeset version
-          publish: pnpm changeset publish
-          title: "chore: release packages"
-          commit: "chore: release packages"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Trusted Publishing使用時はNPM_TOKEN不要
-          # NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Create GitHub Release
-        if: steps.changesets.outputs.published == 'true'
+      - name: Create draft GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ fromJSON(steps.changesets.outputs.publishedPackages)[0].version }}
-          name: v${{ fromJSON(steps.changesets.outputs.publishedPackages)[0].version }}
-          body: |
-            ## Changes
-            See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
+          draft: true
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
