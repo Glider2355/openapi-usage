@@ -1,74 +1,67 @@
 # GitHub Secrets 設定
 
-このドキュメントでは、CI/CDパイプラインに必要なGitHub Secretsの設定方法を説明します。
+このドキュメントでは、CI/CDパイプラインに必要な設定方法を説明します。
 
-## 必要なシークレット
+## Trusted Publishing（推奨）
 
-| シークレット名 | 用途 | 必須 |
-|---------------|------|------|
-| `NPM_TOKEN` | npm公開用トークン | 必須 |
+このプロジェクトは **npm Trusted Publishing** を使用しています。トークン管理が不要で、より安全です。
 
-> `GITHUB_TOKEN` は自動的に提供されるため、手動設定は不要です。
+### 設定手順
 
-## NPM_TOKEN の設定
+#### 1. 初回公開（手動）
 
-### 1. npmでアクセストークンを作成
+初回のみ、2FAを使って手動で公開する必要があります：
 
-1. [npmjs.com](https://www.npmjs.com) にログイン
-2. 右上のアバター → **Access Tokens** をクリック
-3. **Generate New Token** → **Classic Token** を選択
-4. トークン名を入力（例: `github-actions-openapi-usage`）
-5. タイプを **Automation** に設定
-   - Automation: 2FAをバイパスして公開可能（CI/CD向け）
-6. **Generate Token** をクリック
-7. 表示されたトークンをコピー（一度しか表示されません）
+```bash
+npm publish --access public
+# 2FAコードの入力を求められるので入力
+```
 
-### 2. GitHubリポジトリにシークレットを追加
+#### 2. npmjs.comでTrusted Publisherを設定
 
-1. GitHubリポジトリの **Settings** を開く
-2. 左メニューから **Secrets and variables** → **Actions** を選択
-3. **New repository secret** をクリック
-4. 以下を入力:
-   - **Name**: `NPM_TOKEN`
-   - **Secret**: コピーしたnpmトークン
-5. **Add secret** をクリック
+1. [npmjs.com](https://www.npmjs.com) でパッケージページを開く
+2. **Settings** タブをクリック
+3. **Trusted Publisher** セクションを見つける
+4. **GitHub Actions** を選択
+5. 以下を入力：
+   - **Organization or user**: `Glider2355`
+   - **Repository**: `openapi-usage`
+   - **Workflow filename**: `release.yml`
+   - **Environment name**: 空欄
 
-## 確認方法
+#### 3. 完了
 
-シークレットが正しく設定されているか確認するには:
+以降は `release.yml` ワークフローから自動的に公開されます。NPM_TOKENの設定は不要です。
 
-1. テスト用のPRを作成
-2. GitHub Actionsのログを確認
-3. リリースワークフローが正常に動作するか確認
+## 仕組み
 
-## セキュリティ注意事項
+Trusted Publishingは **OpenID Connect (OIDC)** を使用します：
 
-### トークンの管理
+1. GitHub Actionsが短命のOIDCトークンを生成
+2. npmがトークンを検証し、設定されたリポジトリ/ワークフローからのリクエストか確認
+3. 認証が成功すると公開が許可される
 
-- トークンは定期的にローテーション（更新）してください
-- 漏洩した場合は即座にnpmで無効化してください
-- 最小限の権限（Automation）のみを付与してください
+### メリット
 
-### リポジトリの設定
-
-- フォークからのPRでシークレットは利用不可（デフォルトで安全）
-- ブランチ保護ルールを設定し、mainへの直接プッシュを防止
-- 必要に応じて**Environments**で追加の保護を設定
+- トークン漏洩のリスクがない
+- トークンのローテーションが不要
+- 自動的にProvenance（出所証明）が付与される
 
 ## トラブルシューティング
 
-### "npm ERR! 401 Unauthorized"
+### "Unable to authenticate" エラー
 
-- トークンが無効または期限切れ
-- トークンを再生成してシークレットを更新
+1. **ワークフローファイル名を確認**: `release.yml` が正確か（大文字小文字も含めて）
+2. **Organization名を確認**: GitHubのURLと完全一致しているか
+3. **package.jsonのrepository.url**: GitHubのURLと一致しているか
 
-### "npm ERR! 403 Forbidden"
+### GitHub Actionsで失敗する場合
 
-- トークンの権限が不足
-- Automationタイプのトークンを使用しているか確認
+1. `id-token: write` 権限が設定されているか確認
+2. GitHub-hostedランナーを使用しているか確認（self-hostedは未サポート）
+3. npm CLI v11.5.1以上を使用しているか確認
 
-### "npm ERR! 402 Payment Required"
+## 参考リンク
 
-- プライベートパッケージを公開しようとしている
-- `package.json` の `private` フィールドを削除
-- または有料プランへアップグレード
+- [npm Trusted Publishing ドキュメント](https://docs.npmjs.com/trusted-publishers/)
+- [GitHub Changelog: npm trusted publishing](https://github.blog/changelog/2025-07-31-npm-trusted-publishing-with-oidc-is-generally-available/)

@@ -26,7 +26,7 @@
 	"main": "./dist/index.js",
 	"types": "./dist/index.d.ts",
 	"bin": {
-		"openapi-usage": "./dist/bin.js"
+		"openapi-usage": "dist/bin.js"
 	},
 	"exports": {
 		".": {
@@ -43,7 +43,7 @@
 		"node": ">=18.0.0"
 	},
 	"scripts": {
-		"build": "tsc -p tsconfig.build.json",
+		"build": "tsc -p tsconfig.build.json && chmod +x dist/bin.js",
 		"clean": "rm -rf dist",
 		"prebuild": "pnpm clean",
 		"prepublishOnly": "pnpm build",
