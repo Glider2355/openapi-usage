@@ -1,141 +1,111 @@
 # リリース手順
 
-このドキュメントでは、日常的なリリースワークフローを説明します。
-
-## 概要
-
-このプロジェクトは [Changesets](https://github.com/changesets/changesets) を使用してバージョン管理とリリースを行います。
+このドキュメントでは、リリースワークフローを説明します。
 
 ## ワークフロー
 
 ```
-機能開発 → changeset追加 → PR作成 → マージ → リリースPR自動作成 → マージ → npm公開
+バージョン更新 → タグ作成 → ドラフトRelease自動作成 → Publish → npm公開
 ```
 
 ## 手順
 
-### 1. 変更を加える
+### 1. バージョンを更新
 
-通常通りブランチを作成し、コードを変更します:
-
-```bash
-git checkout -b feature/my-feature
-# コードを変更...
-```
-
-### 2. changesetを追加
-
-変更が完了したら、changesetを追加します:
+`package.json` のバージョンを更新します:
 
 ```bash
-pnpm changeset
+# 例: 0.1.0 → 0.2.0
+npm version minor --no-git-tag-version
+
+# または手動で package.json を編集
 ```
 
-対話形式で以下を入力します:
-
-1. **Which packages would you like to include?**
-   - `openapi-usage` を選択（スペースキー）してEnter
-
-2. **Which packages should have a major bump?**
-   - 破壊的変更がある場合のみ選択
-
-3. **Which packages should have a minor bump?**
-   - 新機能追加の場合に選択
-
-4. **Summary**
-   - 変更内容の概要を記述（日本語可）
-
-### 3. PRを作成
+### 2. コミット
 
 ```bash
-git add .
-git commit -m "feat: add my feature"
-git push origin feature/my-feature
+git add package.json
+git commit -m "chore: bump version to 0.2.0"
+git push origin main
 ```
 
-GitHubでPRを作成します。
+### 3. タグを作成
 
-### 4. PRレビュー・マージ
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+```
 
-- changesetファイル（`.changeset/*.md`）もレビュー対象です
-- 変更内容がCHANGELOGに反映されることを確認
+タグをプッシュすると、GitHub Actions が **ドラフト Release** を自動作成します。
 
-### 5. リリースPRの確認
+### 4. Release Notes を確認
 
-mainブランチにマージされると、GitHub Actionsが自動でリリースPRを作成します:
+1. GitHub の [Releases](../../releases) ページを開く
+2. ドラフトリリースを確認
+3. Release Notes を確認・編集（必要に応じて）
 
-- PR名: `chore: release packages`
-- 内容: バージョン更新 + CHANGELOG更新
+### 5. Publish
 
-### 6. リリースPRをマージ
+「Publish release」ボタンをクリックすると:
 
-リリースPRをマージすると:
-
-1. npmパッケージが自動公開
-2. GitHub Releaseが自動作成
-3. CHANGELOG.mdが更新
+1. GitHub Release が公開
+2. npm パッケージが自動公開
 
 ## バージョニング規則（Semantic Versioning）
 
-| 変更タイプ | バージョン | 例 |
-|-----------|-----------|-----|
-| 破壊的変更（BREAKING CHANGE） | Major | 1.0.0 → 2.0.0 |
-| 新機能追加 | Minor | 1.0.0 → 1.1.0 |
-| バグ修正 | Patch | 1.0.0 → 1.0.1 |
+| 変更タイプ | コマンド | 例 |
+|-----------|----------|-----|
+| 破壊的変更 | `npm version major` | 1.0.0 → 2.0.0 |
+| 新機能追加 | `npm version minor` | 1.0.0 → 1.1.0 |
+| バグ修正 | `npm version patch` | 1.0.0 → 1.0.1 |
 
-### 破壊的変更の例
+## Git Tags
 
-- 公開APIの削除・変更
-- 必須オプションの追加
-- 出力形式の変更
-- Node.jsバージョン要件の変更
+### タグの命名規則
 
-### 新機能の例
+```
+v{major}.{minor}.{patch}
+```
 
-- 新しいCLIオプション追加
-- 新しいエクスポート関数追加
-- 新しい出力形式のサポート
+例: `v1.0.0`, `v1.2.3`, `v2.0.0-beta.1`
 
-### バグ修正の例
-
-- 既存機能のバグ修正
-- ドキュメント修正
-- パフォーマンス改善
-
-## 手動リリース（緊急時）
-
-自動化が失敗した場合の手動リリース:
+### タグの確認
 
 ```bash
-# mainブランチを最新に
-git checkout main
-git pull
+# すべてのタグを表示
+git tag
 
-# バージョン更新
-pnpm changeset version
-
-# コミット
-git add .
-git commit -m "chore: release"
-git push
-
-# ビルド＆公開
-pnpm build
-npm publish
+# 特定バージョンのコードをチェックアウト
+git checkout v1.0.0
 ```
+
+## GitHub Release Notes の自動生成
+
+`.github/release.yml` により Release Notes が自動的にカテゴリ分けされます。
+
+| ラベル | カテゴリ |
+|--------|----------|
+| `enhancement` | 🚀 New Features |
+| `bug` | 🐛 Bug Fixes |
+| `breaking-change` | ⚠️ Breaking Changes |
+| `documentation` | 📚 Documentation |
+| `dependencies` | 📦 Dependencies |
+
+PRに適切なラベルを付けることで、Release Notes が自動的に整理されます。
 
 ## FAQ
 
-### Q: changesetを追加し忘れた
+### Q: リリースをやり直したい
 
-PRをマージした後でも、別のPRでchangesetを追加できます。
+1. GitHub Release を削除
+2. タグを削除: `git push origin --delete v0.2.0 && git tag -d v0.2.0`
+3. 修正後、再度タグを作成
 
-### Q: 複数の変更を1つのchangesetにまとめたい
+### Q: Pre-release を作成したい
 
-`pnpm changeset` を複数回実行すると、それぞれ別のchangesetファイルが作成されます。
-1つにまとめたい場合は、`.changeset/` 内のmdファイルを手動で編集してください。
+```bash
+git tag v1.0.0-beta.1
+git push origin v1.0.0-beta.1
+```
 
-### Q: リリースをスキップしたい
-
-リリースPRをクローズ（マージせずに閉じる）してください。
-次のchangesetがマージされると、新しいリリースPRが作成されます。
+ドラフトリリースで「Set as a pre-release」にチェックを入れてから Publish します。
