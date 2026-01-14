@@ -1,8 +1,42 @@
-import { createProgram, parseArgs } from "./cli.js";
-import { run } from "./runner.js";
+// ライブラリエクスポート
 
-const program = createProgram();
-const options = parseArgs(program);
-const result = run(options);
+// Analyzer
+export {
+	type AnalyzeOptions,
+	analyzeSourceFile,
+	analyzeTypeScriptFiles,
+	extractStringLiterals,
+	findMatchingEndpoint,
+	findOpenApiFetchClients,
+} from "./analyzer.js";
 
-process.exit(result.exitCode);
+// CLI
+export { type CliOptions, createProgram, parseArgs } from "./cli.js";
+// OpenAPI Parser
+export {
+	type LoadResult,
+	loadOpenAPISpec,
+	parseOpenAPISpec,
+} from "./openapi-parser.js";
+// Output
+export {
+	formatSummary,
+	formatTree,
+	generateJsonOutput,
+	getUnusedEndpoints,
+} from "./output.js";
+// Runner
+export { type RunResult, run } from "./runner.js";
+
+// Types
+export type {
+	ApiDependencies,
+	Endpoint,
+	HttpMethod,
+	OpenAPIOperation,
+	OpenAPIPathItem,
+	OpenAPISpec,
+	Usage,
+} from "./types.js";
+
+export { HTTP_METHODS } from "./types.js";

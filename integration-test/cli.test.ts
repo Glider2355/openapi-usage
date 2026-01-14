@@ -11,7 +11,7 @@ const OUTPUT_PATH = join(TEST_DIR, "output.json");
 function runCLI(args: string): { exitCode: number; stdout: string } {
 	try {
 		const stdout = execSync(
-			`pnpm tsx src/index.ts --openapi ${OPENAPI_PATH} --src ${SRC_DIR} ${args}`,
+			`pnpm tsx src/bin.ts --openapi ${OPENAPI_PATH} --src ${SRC_DIR} ${args}`,
 			{ encoding: "utf-8", cwd: join(import.meta.dirname, "..") },
 		);
 		return { exitCode: 0, stdout };

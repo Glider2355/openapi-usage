@@ -2,6 +2,22 @@
 
 OpenAPI 仕様を正として、フロントエンドの API 呼び出しを静的解析し、**呼び出し元の可視化**と**未使用 API の検知**を行うツール。
 
+## インストール
+
+```bash
+npm install openapi-usage
+# or
+pnpm add openapi-usage
+# or
+yarn add openapi-usage
+```
+
+グローバルインストール（CLIとして使用）:
+
+```bash
+npm install -g openapi-usage
+```
+
 ## 前提条件
 
 - `openapi-typescript` + `openapi-fetch` を使用したAPIクライアント
@@ -111,3 +127,35 @@ DELETE /users/{id}
 |--------|------|
 | 0 | 未使用 API なし |
 | 1 | 未使用 API あり |
+
+## ライブラリとして使用
+
+```typescript
+import {
+  loadOpenAPISpec,
+  parseOpenAPISpec,
+  analyzeTypeScriptFiles,
+  generateJsonOutput,
+} from "openapi-usage";
+
+// OpenAPI仕様を読み込み
+const specResult = loadOpenAPISpec("./openapi.json");
+if (!specResult.success) {
+  console.error(specResult.error);
+  process.exit(1);
+}
+
+// エンドポイント一覧を抽出
+const endpoints = parseOpenAPISpec(specResult.spec);
+
+// TypeScriptファイルを解析
+const usages = analyzeTypeScriptFiles(endpoints, { srcPath: "./src" });
+
+// JSON出力を生成
+const output = generateJsonOutput(usages);
+console.log(JSON.stringify(output, null, 2));
+```
+
+## ライセンス
+
+MIT
