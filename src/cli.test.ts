@@ -9,7 +9,7 @@ describe("createProgram", () => {
 });
 
 describe("parseArgs", () => {
-	it("必須オプションをパースできる", () => {
+	it("基本オプションをパースできる", () => {
 		const program = createProgram();
 		program.exitOverride();
 
@@ -31,18 +31,28 @@ describe("parseArgs", () => {
 			"--output",
 			"result.json",
 			"--check",
+			"--level",
+			"warn",
+			"-c",
+			"config.yaml",
 		]);
 
 		expect(options.openapi).toBe("openapi.json");
 		expect(options.src).toBe("./src");
 		expect(options.output).toBe("result.json");
 		expect(options.check).toBe(true);
+		expect(options.level).toBe("warn");
+		expect(options.config).toBe("config.yaml");
 	});
 
-	it("必須オプションが欠けている場合はエラー", () => {
+	it("オプションなしでもパースできる（設定ファイル使用時）", () => {
 		const program = createProgram();
 		program.exitOverride();
 
-		expect(() => parseArgs(program, ["-o", "openapi.json"])).toThrow();
+		const options = parseArgs(program, ["-c", "openapi-usage.yaml"]);
+
+		expect(options.openapi).toBeUndefined();
+		expect(options.src).toBeUndefined();
+		expect(options.config).toBe("openapi-usage.yaml");
 	});
 });
