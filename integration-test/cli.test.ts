@@ -140,7 +140,7 @@ client.DELETE("/users/456/posts/789");
 		expect(exitCode).toBe(0);
 	});
 
-	it("--checkでツリー出力を表示する", () => {
+	it("--checkで未使用APIのみを表示する", () => {
 		writeFileSync(
 			OPENAPI_PATH,
 			JSON.stringify({
@@ -162,8 +162,8 @@ client.GET("/users");
 		const { stdout, exitCode } = runCLI("--check");
 		expect(exitCode).toBe(1);
 
-		// ログ行を除去し、ツリー出力部分のみ抽出
-		const treeOutput = stdout
+		// ログ行を除去し、出力部分のみ抽出
+		const output = stdout
 			.split("\n")
 			.filter(
 				(line) =>
@@ -174,14 +174,8 @@ client.GET("/users");
 			.join("\n")
 			.replace(/:\d+/g, ""); // 行番号除去
 
-		expect(treeOutput).toMatchInlineSnapshot(`
+		expect(output).toMatchInlineSnapshot(`
 			"
-			DELETE /posts
-			└─ (unused)
-
-			GET /users
-			└─ src/api.ts
-
 			───────────────────────────────────
 			Unused APIs: 1
 			  - DELETE /posts
