@@ -11,7 +11,14 @@ export {
 } from "./analyzer.js";
 
 // CLI
-export { type CliOptions, createProgram, parseArgs } from "./cli.js";
+export {
+	type CliOptions,
+	createProgram,
+	parseArgs,
+	type SeverityLevel,
+} from "./cli.js";
+// Config
+export { type Config, isIgnored, loadConfig } from "./config.js";
 // OpenAPI Parser
 export {
 	type LoadResult,

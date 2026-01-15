@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { analyzeTypeScriptFiles } from "./analyzer.js";
-import type { CliOptions } from "./cli.js";
+import type { CliOptions, SeverityLevel } from "./cli.js";
+import { type Config, isIgnored, loadConfig } from "./config.js";
 import { loadOpenAPISpec, parseOpenAPISpec } from "./openapi-parser.js";
 import {
 	formatSummary,
@@ -17,13 +18,38 @@ export interface RunResult {
 	error?: string;
 }
 
-function resolvePaths(options: CliOptions): {
+interface ResolvedOptions {
 	openapiPath: string;
 	srcPath: string;
-} {
+	output?: string;
+	check?: boolean;
+	level: SeverityLevel;
+	ignore: string[];
+}
+
+function mergeOptions(
+	cliOptions: CliOptions,
+	config: Config,
+): ResolvedOptions | { error: string } {
+	const openapi = cliOptions.openapi ?? config.openapi;
+	const src = cliOptions.src ?? config.src;
+
+	if (!openapi) {
+		return {
+			error: "OpenAPI spec path is required (--openapi or config file)",
+		};
+	}
+	if (!src) {
+		return { error: "Source directory is required (--src or config file)" };
+	}
+
 	return {
-		openapiPath: resolve(process.cwd(), options.openapi),
-		srcPath: resolve(process.cwd(), options.src),
+		openapiPath: resolve(process.cwd(), openapi),
+		srcPath: resolve(process.cwd(), src),
+		output: cliOptions.output ?? config.output,
+		check: cliOptions.check,
+		level: cliOptions.level ?? config.level ?? "error",
+		ignore: config.ignore ?? [],
 	};
 }
 
@@ -63,13 +89,42 @@ function printUsageReport(usages: Map<string, Usage[]>): void {
 	}
 }
 
+function filterIgnoredEndpoints(
+	usages: Map<string, Usage[]>,
+	ignorePatterns: string[],
+): Map<string, Usage[]> {
+	if (ignorePatterns.length === 0) {
+		return usages;
+	}
+
+	const filtered = new Map<string, Usage[]>();
+	for (const [endpoint, usageList] of usages) {
+		if (!isIgnored(endpoint, ignorePatterns)) {
+			filtered.set(endpoint, usageList);
+		}
+	}
+	return filtered;
+}
+
 /**
  * API使用状況解析を実行する
  * @param options - CLIオプション（OpenAPIパス、ソースパス等）
  * @returns 実行結果（成功/失敗、終了コード、エラーメッセージ）
  */
 export function run(options: CliOptions): RunResult {
-	const { openapiPath, srcPath } = resolvePaths(options);
+	const configResult = loadConfig(options.config);
+	if (!configResult.success) {
+		console.error(`Error: ${configResult.error}`);
+		return { success: false, exitCode: 1, error: configResult.error };
+	}
+
+	const resolved = mergeOptions(options, configResult.config);
+	if ("error" in resolved) {
+		console.error(`Error: ${resolved.error}`);
+		return { success: false, exitCode: 1, error: resolved.error };
+	}
+
+	const { openapiPath, srcPath, output, check, level, ignore } = resolved;
 
 	const validationError = validatePaths(openapiPath, srcPath);
 	if (validationError) {
@@ -89,19 +144,28 @@ export function run(options: CliOptions): RunResult {
 	console.log(`Found ${endpoints.size} endpoints`);
 
 	console.log(`Analyzing source files: ${srcPath}`);
-	const usages = analyzeTypeScriptFiles(endpoints, { srcPath });
+	const rawUsages = analyzeTypeScriptFiles(endpoints, { srcPath });
+	const usages = filterIgnoredEndpoints(rawUsages, ignore);
 
-	if (options.output) {
-		writeJsonOutput(options.output, usages);
+	if (ignore.length > 0) {
+		const ignoredCount = rawUsages.size - usages.size;
+		if (ignoredCount > 0) {
+			console.log(`Ignored ${ignoredCount} endpoints`);
+		}
 	}
 
-	if (options.check) {
+	if (output) {
+		writeJsonOutput(output, usages);
+	}
+
+	if (check) {
 		printUsageReport(usages);
-		const exitCode = getUnusedEndpoints(usages).length > 0 ? 1 : 0;
+		const hasUnused = getUnusedEndpoints(usages).length > 0;
+		const exitCode = hasUnused && level === "error" ? 1 : 0;
 		return { success: true, exitCode };
 	}
 
-	if (!options.output && !options.check) {
+	if (!output && !check) {
 		printUsageReport(usages);
 	}
 

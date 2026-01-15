@@ -1,8 +1,10 @@
 # openapi-usage
 
-OpenAPI 仕様を正として、フロントエンドの API 呼び出しを静的解析し、**呼び出し元の可視化**と**未使用 API の検知**を行うツール。
+[日本語](./README.ja.md)
 
-## インストール
+A tool for statically analyzing frontend API calls using OpenAPI spec as the source of truth. It provides **call site visualization** and **unused API detection**.
+
+## Installation
 
 ```bash
 npm install openapi-usage
@@ -12,79 +14,139 @@ pnpm add openapi-usage
 yarn add openapi-usage
 ```
 
-グローバルインストール（CLIとして使用）:
+Global installation (for CLI usage):
 
 ```bash
 npm install -g openapi-usage
 ```
 
-## 前提条件
+## Prerequisites
 
-- `openapi-typescript` + `openapi-fetch` を使用したAPIクライアント
-- `createClient()` で作成されたクライアント（変数名は自動検出）
-- 動的パス生成なし（文字列リテラルのみ）
+- API client using `openapi-typescript` + `openapi-fetch`
+- Client created with `createClient()` (variable name is auto-detected)
+- No dynamic path generation (string literals only)
 
-## 検知パターン
+## Detection Patterns
 
-### 検知できる
+### Detectable
 
 ```typescript
-// 文字列リテラル
+// String literals
 client.GET("/users");
 
-// createClient で作成した任意の変数名
+// Any variable name created with createClient
 const api = createClient<paths>();
 api.GET("/users");
 
-// 三項演算子
+// Ternary operator
 client.GET(isAdmin ? "/admins" : "/users");
 
-// 単純な変数参照
+// Simple variable reference
 const path = "/users";
 client.GET(path);
 
-// パスパラメータ（推奨パターン）
+// Path parameters (recommended pattern)
 client.GET("/users/{id}", { params: { path: { id: userId } } });
 ```
 
-### 検知できない
+### Not Detectable
 
 ```typescript
-// テンプレートリテラル（型安全性も失われるため非推奨）
+// Template literals (not recommended as it also breaks type safety)
 client.GET(`/users/${id}`);
 
-// 関数の戻り値
+// Function return values
 const path = getPath();
 client.GET(path);
 
-// 文字列結合
+// String concatenation
 client.GET("/users" + "/" + id);
 
-// 動的に構築されたパス
+// Dynamically constructed paths
 const base = "/users";
 client.GET(`${base}/${id}`);
 ```
 
-> **Note:** 検知できないパターンは `openapi-fetch` の型安全性も失われます。
-> パスパラメータは `params.path` で渡す方法を推奨します。
+> **Note:** Patterns that cannot be detected also lose `openapi-fetch` type safety.
+> For path parameters, using `params.path` is recommended.
 
-## CLI オプション
+## Configuration File
 
-```bash
-openapi-usage --openapi <path> --src <path> [options]
+You can configure openapi-usage using a YAML configuration file. The following filenames are automatically detected:
 
-必須:
-  -o, --openapi <path>  OpenAPI仕様ファイル(json)のパス
-  -s, --src <path>      解析対象ディレクトリ
+- `openapi-usage.yaml`
+- `openapi-usage.yml`
+- `.openapi-usage.yaml`
+- `.openapi-usage.yml`
 
-オプション:
-  --output <path>       JSON出力先パス
-  --check               チェックモード（未使用があればexit 1）
+### Example Configuration
+
+```yaml
+# openapi-usage.yaml
+openapi: ./openapi.json
+src: ./src
+output: ./api-usage.json
+level: error
+
+# Ignore specific endpoints
+ignore:
+  - "GET /health"
+  - "GET /metrics"
+  - "* /internal/*"  # Wildcard pattern
 ```
 
-## 出力形式
+### Configuration Options
 
-### ツリー表示（--check モード）
+| Option | Description |
+|--------|-------------|
+| `openapi` | Path to OpenAPI spec file (json) |
+| `src` | Source directory to analyze |
+| `output` | Output JSON file path |
+| `level` | Severity level: `error` or `warn` |
+| `ignore` | List of endpoints to ignore (supports wildcards) |
+
+### Ignore Patterns
+
+The `ignore` option supports exact matches and wildcard patterns:
+
+```yaml
+ignore:
+  # Exact match
+  - "GET /health"
+  - "POST /internal/webhook"
+
+  # Wildcard patterns
+  - "* /internal/*"      # All methods under /internal/
+  - "GET /admin/*"       # All GET requests under /admin/
+  - "* /v1/deprecated/*" # All deprecated v1 endpoints
+```
+
+## CLI Options
+
+```bash
+openapi-usage [options]
+
+Options:
+  -o, --openapi <path>  Path to OpenAPI spec file (json)
+  -s, --src <path>      Source directory to analyze
+  --output <path>       Output JSON file path
+  --check               Check mode (exit 1 if unused APIs exist with --level error)
+  --level <level>       Set severity level for unused APIs: "error" or "warn" (default: "error")
+  -c, --config <path>   Path to config file (YAML)
+```
+
+CLI options override configuration file settings.
+
+### Severity Level
+
+The `--level` option controls the behavior when unused APIs are detected:
+
+- `--level error` (default): Exit with code 1 when unused APIs are found
+- `--level warn`: Exit with code 0, only display warnings
+
+## Output Format
+
+### Tree Display (--check mode)
 
 ```
 GET /users
@@ -92,14 +154,14 @@ GET /users
 └─ src/hooks/useUsers.ts:18
 
 DELETE /users/{id}
-└─ (未使用)
+└─ (unused)
 
 ───────────────────────────────────
-未使用 API: 1件
+Unused APIs: 1
   - DELETE /users/{id}
 ```
 
-### JSON出力（--output モード）
+### JSON Output (--output mode)
 
 ```json
 {
@@ -121,14 +183,14 @@ DELETE /users/{id}
 }
 ```
 
-## 終了コード
+## Exit Codes
 
-| コード | 意味 |
-|--------|------|
-| 0 | 未使用 API なし |
-| 1 | 未使用 API あり |
+| Code | Meaning |
+|------|---------|
+| 0 | No unused APIs (or `--level warn`) |
+| 1 | Unused APIs exist (with `--level error`) |
 
-## ライブラリとして使用
+## Library Usage
 
 ```typescript
 import {
@@ -138,24 +200,24 @@ import {
   generateJsonOutput,
 } from "openapi-usage";
 
-// OpenAPI仕様を読み込み
+// Load OpenAPI spec
 const specResult = loadOpenAPISpec("./openapi.json");
 if (!specResult.success) {
   console.error(specResult.error);
   process.exit(1);
 }
 
-// エンドポイント一覧を抽出
+// Extract endpoint list
 const endpoints = parseOpenAPISpec(specResult.spec);
 
-// TypeScriptファイルを解析
+// Analyze TypeScript files
 const usages = analyzeTypeScriptFiles(endpoints, { srcPath: "./src" });
 
-// JSON出力を生成
+// Generate JSON output
 const output = generateJsonOutput(usages);
 console.log(JSON.stringify(output, null, 2));
 ```
 
-## ライセンス
+## License
 
 MIT
