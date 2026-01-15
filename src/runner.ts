@@ -159,9 +159,12 @@ export function run(options: CliOptions): RunResult {
 	}
 
 	if (check) {
-		printUsageReport(usages);
-		const hasUnused = getUnusedEndpoints(usages).length > 0;
-		const exitCode = hasUnused && level === "error" ? 1 : 0;
+		const unusedEndpoints = getUnusedEndpoints(usages);
+		console.log();
+		for (const line of formatSummary(usages)) {
+			console.log(line);
+		}
+		const exitCode = unusedEndpoints.length > 0 && level === "error" ? 1 : 0;
 		return { success: true, exitCode };
 	}
 

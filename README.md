@@ -146,16 +146,9 @@ The `--level` option controls the behavior when unused APIs are detected:
 
 ## Output Format
 
-### Tree Display (--check mode)
+### Check Mode (--check)
 
 ```
-GET /users
-├─ src/pages/Users.tsx:42
-└─ src/hooks/useUsers.ts:18
-
-DELETE /users/{id}
-└─ (unused)
-
 ───────────────────────────────────
 Unused APIs: 1
   - DELETE /users/{id}
@@ -165,7 +158,6 @@ Unused APIs: 1
 
 ```json
 {
-  "generated_at": "2026-01-13T10:00:00Z",
   "endpoints": [
     {
       "method": "GET",
