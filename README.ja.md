@@ -146,18 +146,11 @@ CLIオプションは設定ファイルの設定を上書きします。
 
 ## 出力形式
 
-### ツリー表示（--check モード）
+### チェックモード（--check）
 
 ```
-GET /users
-├─ src/pages/Users.tsx:42
-└─ src/hooks/useUsers.ts:18
-
-DELETE /users/{id}
-└─ (未使用)
-
 ───────────────────────────────────
-未使用 API: 1件
+Unused APIs: 1
   - DELETE /users/{id}
 ```
 
@@ -165,7 +158,6 @@ DELETE /users/{id}
 
 ```json
 {
-  "generated_at": "2026-01-13T10:00:00Z",
   "endpoints": [
     {
       "method": "GET",
