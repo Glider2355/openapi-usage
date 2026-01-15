@@ -177,13 +177,13 @@ client.GET("/users");
 		expect(treeOutput).toMatchInlineSnapshot(`
 			"
 			DELETE /posts
-			└─ (未使用)
+			└─ (unused)
 
 			GET /users
 			└─ src/api.ts
 
 			───────────────────────────────────
-			未使用 API: 1件
+			Unused APIs: 1
 			  - DELETE /posts
 			"
 		`);
