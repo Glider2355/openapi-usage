@@ -18,7 +18,7 @@ describe("formatTree", () => {
 		expect(lines).toContain("GET /users");
 		expect(lines).toContain("└─ src/pages/Users.tsx:42");
 		expect(lines).toContain("POST /users");
-		expect(lines).toContain("└─ (未使用)");
+		expect(lines).toContain("└─ (unused)");
 	});
 
 	it("複数の使用箇所を正しいプレフィックスで表示する", () => {
@@ -83,7 +83,7 @@ describe("formatSummary", () => {
 
 		const lines = formatSummary(usages);
 
-		expect(lines).toContain("未使用 API: 0件");
+		expect(lines).toContain("Unused APIs: 0");
 	});
 
 	it("未使用のエンドポイントを一覧表示する", () => {
@@ -94,7 +94,7 @@ describe("formatSummary", () => {
 
 		const lines = formatSummary(usages);
 
-		expect(lines).toContain("未使用 API: 2件");
+		expect(lines).toContain("Unused APIs: 2");
 		expect(lines).toContain("  - GET /users");
 		expect(lines).toContain("  - POST /users");
 	});
@@ -106,11 +106,9 @@ describe("generateJsonOutput", () => {
 			["GET /users", [{ file: "src/a.ts", line: 1 }]],
 			["POST /users", []],
 		]);
-		const date = new Date("2024-01-01T00:00:00Z");
 
-		const output = generateJsonOutput(usages, date);
+		const output = generateJsonOutput(usages);
 
-		expect(output.generated_at).toBe("2024-01-01T00:00:00.000Z");
 		expect(output.endpoints).toHaveLength(2);
 		expect(output.summary).toEqual({
 			total: 2,
@@ -121,9 +119,8 @@ describe("generateJsonOutput", () => {
 
 	it("メソッドとパスを正しく分割する", () => {
 		const usages = new Map([["GET /users/{id}", []]]);
-		const date = new Date("2024-01-01T00:00:00Z");
 
-		const output = generateJsonOutput(usages, date);
+		const output = generateJsonOutput(usages);
 
 		expect(output.endpoints[0].method).toBe("GET");
 		expect(output.endpoints[0].path).toBe("/users/{id}");

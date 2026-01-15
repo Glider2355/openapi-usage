@@ -5,7 +5,7 @@ const sortByKey = <T>(entries: [string, T][]): [string, T][] =>
 
 const formatUsageLines = (key: string, usages: Usage[]): string[] => {
 	if (usages.length === 0) {
-		return [key, "└─ (未使用)", ""];
+		return [key, "└─ (unused)", ""];
 	}
 
 	const usageLines = usages.map((usage, index) => {
@@ -46,12 +46,12 @@ export const formatSummary = (usages: Map<string, Usage[]>): string[] => {
 	const separator = "─".repeat(35);
 
 	if (unused.length === 0) {
-		return [separator, "未使用 API: 0件"];
+		return [separator, "Unused APIs: 0"];
 	}
 
 	return [
 		separator,
-		`未使用 API: ${unused.length}件`,
+		`Unused APIs: ${unused.length}`,
 		...unused.map((endpoint) => `  - ${endpoint}`),
 	];
 };
@@ -59,12 +59,10 @@ export const formatSummary = (usages: Map<string, Usage[]>): string[] => {
 /**
  * API使用状況をJSON出力用のオブジェクトに変換する
  * @param usages - エンドポイントごとの使用箇所マップ
- * @param generatedAt - 生成日時（省略時は現在時刻）
  * @returns JSON出力用のApiDependenciesオブジェクト
  */
 export const generateJsonOutput = (
 	usages: Map<string, Usage[]>,
-	generatedAt: Date = new Date(),
 ): ApiDependencies => {
 	const entries = sortByKey([...usages.entries()]);
 
@@ -76,7 +74,6 @@ export const generateJsonOutput = (
 	const used = entries.filter(([, list]) => list.length > 0).length;
 
 	return {
-		generated_at: generatedAt.toISOString(),
 		endpoints,
 		summary: {
 			total: endpoints.length,

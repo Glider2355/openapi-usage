@@ -33,7 +33,6 @@ export interface Endpoint {
 }
 
 export interface ApiDependencies {
-	generated_at: string;
 	endpoints: Endpoint[];
 	summary: {
 		total: number;
