@@ -1,6 +1,6 @@
 {
 	"name": "openapi-usage",
-	"version": "0.0.3",
+	"version": "0.0.4",
 	"description": "OpenAPI仕様を正としてAPIの使用状況を静的解析し、未使用APIを検知するツール",
 	"keywords": [
 		"openapi",
