@@ -16,7 +16,7 @@ describe("parseArgs", () => {
 		const options = parseArgs(program, ["-o", "openapi.json", "-s", "./src"]);
 
 		expect(options.openapi).toBe("openapi.json");
-		expect(options.src).toBe("./src");
+		expect(options.src).toEqual(["./src"]);
 	});
 
 	it("全オプションをパースできる", () => {
@@ -38,11 +38,25 @@ describe("parseArgs", () => {
 		]);
 
 		expect(options.openapi).toBe("openapi.json");
-		expect(options.src).toBe("./src");
+		expect(options.src).toEqual(["./src"]);
 		expect(options.output).toBe("result.json");
 		expect(options.check).toBe(true);
 		expect(options.level).toBe("warn");
 		expect(options.config).toBe("config.yaml");
+	});
+
+	it("--srcを複数回指定すると配列になる", () => {
+		const program = createProgram();
+		program.exitOverride();
+
+		const options = parseArgs(program, [
+			"-s",
+			"packages/frontend/src",
+			"-s",
+			"e2e/api",
+		]);
+
+		expect(options.src).toEqual(["packages/frontend/src", "e2e/api"]);
 	});
 
 	it("オプションなしでもパースできる（設定ファイル使用時）", () => {

@@ -8,8 +8,16 @@ export { extractStringLiterals } from "./extractors.js";
 export { findMatchingEndpoint } from "./path-matcher.js";
 
 export interface AnalyzeOptions {
-	srcPath: string;
+	/** 解析対象のソースディレクトリ（単一指定） */
+	srcPath?: string;
+	/** 解析対象のソースディレクトリ（複数指定） */
+	srcPaths?: string[];
 	tsConfigPath?: string;
+	/**
+	 * 使用箇所のファイルパスを相対化する基準ディレクトリ
+	 * 省略時は process.cwd()
+	 */
+	basePath?: string;
 }
 
 /**
@@ -22,15 +30,19 @@ export function analyzeTypeScriptFiles(
 	endpoints: Map<string, Set<string>>,
 	options: AnalyzeOptions,
 ): Map<string, Usage[]> {
-	const { srcPath, tsConfigPath } = options;
+	const { srcPath, srcPaths, tsConfigPath, basePath } = options;
+	const roots = [...(srcPaths ?? []), ...(srcPath ? [srcPath] : [])];
 	const project = createProject(tsConfigPath);
 
-	project.addSourceFilesAtPaths([`${srcPath}/**/*.ts`, `${srcPath}/**/*.tsx`]);
+	for (const root of roots) {
+		project.addSourceFilesAtPaths([`${root}/**/*.ts`, `${root}/**/*.tsx`]);
+	}
 
 	const usages = initializeUsagesMap(endpoints);
+	const relativeBase = basePath ?? process.cwd();
 
 	for (const sourceFile of project.getSourceFiles()) {
-		analyzeSourceFile(sourceFile, srcPath, endpoints, usages);
+		analyzeSourceFile(sourceFile, relativeBase, endpoints, usages);
 	}
 
 	return usages;
@@ -168,18 +180,18 @@ function recordUsage(
 /**
  * 単一のソースファイルを解析してAPI呼び出しを検出する
  * @param sourceFile - 解析対象のソースファイル
- * @param srcPath - ソースディレクトリのパス
+ * @param basePath - 使用箇所のファイルパスを相対化する基準ディレクトリ
  * @param endpoints - OpenAPIエンドポイント一覧
  * @param usages - 使用箇所を記録するマップ（副作用で更新）
  */
 export function analyzeSourceFile(
 	sourceFile: SourceFile,
-	srcPath: string,
+	basePath: string,
 	endpoints: Map<string, Set<string>>,
 	usages: Map<string, Usage[]>,
 ): void {
 	const filePath = sourceFile.getFilePath();
-	const relativeFilePath = relative(resolve(srcPath, ".."), filePath);
+	const relativeFilePath = relative(resolve(basePath), filePath);
 	const clientNames = findOpenApiFetchClients(sourceFile);
 
 	sourceFile.forEachDescendant((node) => {

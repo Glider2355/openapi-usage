@@ -93,6 +93,15 @@ ignore:
   - "GET /health"
   - "GET /metrics"
   - "* /internal/*"  # Wildcard pattern
+  - pattern: "GET /temp/*"
+    reason: "Local static file serving"
+
+# Restrict where each endpoint may be called from
+locations:
+  "* /users/**":
+    - "src/hooks/api/user/**"
+  "*":
+    - "src/hooks/api/**"
 ```
 
 ### Configuration Options
@@ -100,10 +109,20 @@ ignore:
 | Option | Description |
 |--------|-------------|
 | `openapi` | Path to OpenAPI spec file (json) |
-| `src` | Source directory to analyze |
-| `output` | Output JSON file path |
-| `level` | Severity level: `error` or `warn` |
-| `ignore` | List of endpoints to ignore (supports wildcards) |
+| `src` | Source directory to analyze. A single path, or a list of paths |
+| `output` | Output JSON file path. Ignored in `--check` mode |
+| `level` | Severity level: `error` or `warn`. Validated at startup |
+| `ignore` | List of endpoints to ignore. A pattern string, or `{ pattern, reason }` |
+| `locations` | Endpoint pattern → directory globs the endpoint may be called from |
+
+The config file is schema-validated. An invalid value (for example `level: warning`)
+exits with code 1 instead of being silently ignored, and unknown keys are reported
+as warnings:
+
+```
+Error: Invalid config file /app/openapi-usage.yaml: level: invalid level "warning" (expected "error" or "warn")
+Warning: unknown config key "levell" in /app/openapi-usage.yaml (ignored)
+```
 
 ### Ignore Patterns
 
@@ -121,6 +140,86 @@ ignore:
   - "* /v1/deprecated/*" # All deprecated v1 endpoints
 ```
 
+An entry can also carry a machine-readable reason. The reason shows up in the
+report and in the JSON output, so "why is this left unused" does not have to live
+in a YAML comment:
+
+```yaml
+ignore:
+  - "GET /health"                  # Plain strings still work
+  - pattern: "GET /temp/*"
+    reason: "Local static file serving"
+```
+
+Patterns that match no endpoint are reported, so an ignore entry left behind by a
+renamed or deleted endpoint does not stay unnoticed:
+
+```
+warning: ignore pattern "GET /sounds/*" matched no endpoint
+```
+
+### Multiple Source Directories
+
+Pass `--src` more than once, or give `src` a list, to analyze several clients
+against the same spec — for example a frontend and an e2e suite. An endpoint is
+counted as used when any of the directories calls it, and the summary also
+reports how many endpoints each directory does not call:
+
+```yaml
+src:
+  - packages/frontend/src
+  - e2e/api
+```
+
+```bash
+openapi-usage --src packages/frontend/src --src e2e/api --check
+```
+
+```
+───────────────────────────────────
+Unused APIs: 1
+  - DELETE /users/{id}
+Unused APIs per source:
+  packages/frontend/src: 2
+  e2e/api: 9
+```
+
+Call-site paths in the report and in the JSON output are relative to the current
+working directory.
+
+### Call-site Location Rules
+
+`locations` maps an endpoint pattern to the directory globs its call sites are
+allowed to live in — for example "API hooks belong under `src/hooks/api/`, mirroring
+the API path structure". A call from anywhere else is reported as a violation, and
+fails `--check` with `level: error`:
+
+```yaml
+locations:
+  # endpoint pattern → allowed call-site directory globs
+  "* /novel/**":
+    - "src/hooks/api/novel/**"
+    - "src/app/**/_lib/**"        # SSR data fetching
+  "* /user/**":
+    - "src/hooks/api/user/**"
+  "*":                            # Default
+    - "src/hooks/api/**"
+```
+
+```
+───────────────────────────────────
+Location violations: 1
+  - GET /novel/{novel_id} at src/components/NovelCard.tsx:12
+    allowed: src/hooks/api/novel/**, src/app/**/_lib/** (rule: "* /novel/**")
+```
+
+- In directory globs, `**` crosses directory boundaries and `*` does not
+- When several endpoint patterns match, the most specific one wins (the one with
+  the most non-wildcard characters), so `"*"` acts as a default
+- Globs are matched against paths relative to the current working directory
+- `ignore` does not exempt call sites from these rules: it only controls
+  unused-API reporting
+
 ## CLI Options
 
 ```bash
@@ -128,7 +227,7 @@ openapi-usage [options]
 
 Options:
   -o, --openapi <path>  Path to OpenAPI spec file (json)
-  -s, --src <path>      Source directory to analyze
+  -s, --src <path>      Source directory to analyze (repeatable)
   --output <path>       Output JSON file path
   --check               Check mode (exit 1 if unused APIs exist with --level error)
   --level <level>       Set severity level for unused APIs: "error" or "warn" (default: "error")
@@ -136,6 +235,10 @@ Options:
 ```
 
 CLI options override configuration file settings.
+
+In `--check` mode the `output` file from the config file is **not** written, so
+running the check as part of a lint task has no side effects. Pass `--output`
+explicitly when you want the JSON written anyway.
 
 ### Severity Level
 
@@ -154,6 +257,15 @@ Unused APIs: 1
   - DELETE /users/{id}
 ```
 
+With `locations` configured, violations are listed after the summary:
+
+```
+───────────────────────────────────
+Location violations: 1
+  - GET /users at src/api.ts:4
+    allowed: src/hooks/api/** (rule: "*")
+```
+
 ### JSON Output (--output mode)
 
 ```json
@@ -165,22 +277,35 @@ Unused APIs: 1
       "usages": [
         { "file": "src/pages/Users.tsx", "line": 42 }
       ]
+    },
+    {
+      "method": "GET",
+      "path": "/temp/{id}",
+      "usages": [],
+      "ignored": true,
+      "reason": "Local static file serving"
     }
   ],
   "summary": {
     "total": 50,
-    "used": 49,
-    "unused": 1
+    "used": 48,
+    "unused": 1,
+    "ignored": 1
   }
 }
 ```
+
+Ignored endpoints are included with `ignored: true` (plus `reason` when the ignore
+entry has one) and are counted in `summary.ignored` instead of `summary.unused`,
+so `used + unused + ignored === total`.
 
 ## Exit Codes
 
 | Code | Meaning |
 |------|---------|
-| 0 | No unused APIs (or `--level warn`) |
-| 1 | Unused APIs exist (with `--level error`) |
+| 0 | No unused APIs and no location violations (or `--level warn`) |
+| 1 | Unused APIs or location violations exist (with `--level error`) |
+| 1 | Invalid configuration (unknown `level`, wrong value types, missing paths) |
 
 ## Library Usage
 
@@ -202,8 +327,8 @@ if (!specResult.success) {
 // Extract endpoint list
 const endpoints = parseOpenAPISpec(specResult.spec);
 
-// Analyze TypeScript files
-const usages = analyzeTypeScriptFiles(endpoints, { srcPath: "./src" });
+// Analyze TypeScript files (srcPaths accepts multiple directories)
+const usages = analyzeTypeScriptFiles(endpoints, { srcPaths: ["./src"] });
 
 // Generate JSON output
 const output = generateJsonOutput(usages);

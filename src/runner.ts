@@ -1,12 +1,24 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 import { analyzeTypeScriptFiles } from "./analyzer.js";
 import type { CliOptions, SeverityLevel } from "./cli.js";
-import { type Config, isIgnored, loadConfig } from "./config.js";
+import {
+	type Config,
+	type IgnoreRule,
+	loadConfig,
+	matchEndpointPattern,
+	normalizeIgnoreRules,
+	severityLevelSchema,
+} from "./config.js";
+import { findLocationViolations, type LocationViolation } from "./locations.js";
 import { loadOpenAPISpec, parseOpenAPISpec } from "./openapi-parser.js";
 import {
+	formatIgnoredEndpoints,
+	formatLocationViolations,
+	formatSourceSummary,
 	formatSummary,
 	formatTree,
+	formatUnmatchedIgnoreWarnings,
 	generateJsonOutput,
 	getUnusedEndpoints,
 } from "./output.js";
@@ -20,11 +32,22 @@ export interface RunResult {
 
 interface ResolvedOptions {
 	openapiPath: string;
-	srcPath: string;
+	/** 解析対象ディレクトリの絶対パス */
+	srcPaths: string[];
+	/** 解析対象ディレクトリのcwd相対パス（使用箇所のfileと同じ基準） */
+	srcRelPaths: string[];
 	output?: string;
 	check?: boolean;
 	level: SeverityLevel;
-	ignore: string[];
+	ignoreRules: IgnoreRule[];
+	locations: Record<string, string[]>;
+	/** --check で config の output を無視した場合はtrue */
+	skippedConfigOutput: boolean;
+}
+
+function toArray(value?: string | string[]): string[] {
+	if (value === undefined) return [];
+	return Array.isArray(value) ? value : [value];
 }
 
 function mergeOptions(
@@ -32,33 +55,54 @@ function mergeOptions(
 	config: Config,
 ): ResolvedOptions | { error: string } {
 	const openapi = cliOptions.openapi ?? config.openapi;
-	const src = cliOptions.src ?? config.src;
+	const srcInputs = toArray(cliOptions.src ?? config.src);
 
 	if (!openapi) {
 		return {
 			error: "OpenAPI spec path is required (--openapi or config file)",
 		};
 	}
-	if (!src) {
+	if (srcInputs.length === 0) {
 		return { error: "Source directory is required (--src or config file)" };
 	}
 
+	const levelResult = severityLevelSchema.safeParse(
+		cliOptions.level ?? config.level ?? "error",
+	);
+	if (!levelResult.success) {
+		return { error: levelResult.error.issues[0].message };
+	}
+
+	// --check はファイルを書き換えない: 明示的な --output のみ尊重する
+	const skippedConfigOutput = Boolean(
+		cliOptions.check && !cliOptions.output && config.output,
+	);
+	const output =
+		cliOptions.output ?? (cliOptions.check ? undefined : config.output);
+
+	const srcPaths = srcInputs.map((src) => resolve(process.cwd(), src));
+
 	return {
 		openapiPath: resolve(process.cwd(), openapi),
-		srcPath: resolve(process.cwd(), src),
-		output: cliOptions.output ?? config.output,
+		srcPaths,
+		srcRelPaths: srcPaths.map((srcPath) => relative(process.cwd(), srcPath)),
+		output,
 		check: cliOptions.check,
-		level: cliOptions.level ?? config.level ?? "error",
-		ignore: config.ignore ?? [],
+		level: levelResult.data,
+		ignoreRules: normalizeIgnoreRules(config.ignore ?? []),
+		locations: config.locations ?? {},
+		skippedConfigOutput,
 	};
 }
 
-function validatePaths(openapiPath: string, srcPath: string): string | null {
+function validatePaths(openapiPath: string, srcPaths: string[]): string | null {
 	if (!existsSync(openapiPath)) {
 		return `OpenAPI spec not found: ${openapiPath}`;
 	}
-	if (!existsSync(srcPath)) {
-		return `Source directory not found: ${srcPath}`;
+	for (const srcPath of srcPaths) {
+		if (!existsSync(srcPath)) {
+			return `Source directory not found: ${srcPath}`;
+		}
 	}
 	return null;
 }
@@ -66,6 +110,7 @@ function validatePaths(openapiPath: string, srcPath: string): string | null {
 function writeJsonOutput(
 	outputPath: string,
 	usages: Map<string, Usage[]>,
+	ignored: Map<string, IgnoreRule>,
 ): void {
 	const resolvedPath = resolve(process.cwd(), outputPath);
 	const outputDir = dirname(resolvedPath);
@@ -74,36 +119,61 @@ function writeJsonOutput(
 		mkdirSync(outputDir, { recursive: true });
 	}
 
-	const jsonOutput = generateJsonOutput(usages);
+	const jsonOutput = generateJsonOutput(usages, ignored);
 	writeFileSync(resolvedPath, JSON.stringify(jsonOutput, null, 2));
 	console.log(`Output written to: ${resolvedPath}`);
 }
 
-function printUsageReport(usages: Map<string, Usage[]>): void {
-	console.log();
-	for (const line of formatTree(usages)) {
-		console.log(line);
-	}
-	for (const line of formatSummary(usages)) {
+function printLines(lines: string[]): void {
+	for (const line of lines) {
 		console.log(line);
 	}
 }
 
-function filterIgnoredEndpoints(
-	usages: Map<string, Usage[]>,
-	ignorePatterns: string[],
-): Map<string, Usage[]> {
-	if (ignorePatterns.length === 0) {
-		return usages;
-	}
+interface IgnoreResult {
+	/** ignoreされなかったエンドポイント */
+	kept: Map<string, Usage[]>;
+	/** ignoreされたエンドポイント → 適用されたルール */
+	ignored: Map<string, IgnoreRule>;
+	/** どのエンドポイントにもマッチしなかったルール */
+	unmatched: IgnoreRule[];
+}
 
-	const filtered = new Map<string, Usage[]>();
+/**
+ * ignoreルールを適用し、マッチ数0のルールを検出する
+ * @param usages - エンドポイントごとの使用箇所マップ
+ * @param rules - 正規化済みignoreルール
+ * @returns 残ったエンドポイント、ignore済みエンドポイント、未マッチルール
+ */
+export function applyIgnoreRules(
+	usages: Map<string, Usage[]>,
+	rules: IgnoreRule[],
+): IgnoreResult {
+	const kept = new Map<string, Usage[]>();
+	const ignored = new Map<string, IgnoreRule>();
+	const matchedRules = new Set<IgnoreRule>();
+
 	for (const [endpoint, usageList] of usages) {
-		if (!isIgnored(endpoint, ignorePatterns)) {
-			filtered.set(endpoint, usageList);
+		const matching = rules.filter((rule) =>
+			matchEndpointPattern(endpoint, rule.pattern),
+		);
+
+		for (const rule of matching) {
+			matchedRules.add(rule);
+		}
+
+		if (matching.length === 0) {
+			kept.set(endpoint, usageList);
+		} else {
+			ignored.set(endpoint, matching[0]);
 		}
 	}
-	return filtered;
+
+	return {
+		kept,
+		ignored,
+		unmatched: rules.filter((rule) => !matchedRules.has(rule)),
+	};
 }
 
 /**
@@ -118,15 +188,29 @@ export function run(options: CliOptions): RunResult {
 		return { success: false, exitCode: 1, error: configResult.error };
 	}
 
+	for (const warning of configResult.warnings) {
+		console.warn(`Warning: ${warning}`);
+	}
+
 	const resolved = mergeOptions(options, configResult.config);
 	if ("error" in resolved) {
 		console.error(`Error: ${resolved.error}`);
 		return { success: false, exitCode: 1, error: resolved.error };
 	}
 
-	const { openapiPath, srcPath, output, check, level, ignore } = resolved;
+	const {
+		openapiPath,
+		srcPaths,
+		srcRelPaths,
+		output,
+		check,
+		level,
+		ignoreRules,
+		locations,
+		skippedConfigOutput,
+	} = resolved;
 
-	const validationError = validatePaths(openapiPath, srcPath);
+	const validationError = validatePaths(openapiPath, srcPaths);
 	if (validationError) {
 		console.error(`Error: ${validationError}`);
 		return { success: false, exitCode: 1, error: validationError };
@@ -143,34 +227,61 @@ export function run(options: CliOptions): RunResult {
 	const endpoints = parseOpenAPISpec(specResult.spec);
 	console.log(`Found ${endpoints.size} endpoints`);
 
-	console.log(`Analyzing source files: ${srcPath}`);
-	const rawUsages = analyzeTypeScriptFiles(endpoints, { srcPath });
-	const usages = filterIgnoredEndpoints(rawUsages, ignore);
+	console.log(`Analyzing source files: ${srcRelPaths.join(", ")}`);
+	const rawUsages = analyzeTypeScriptFiles(endpoints, {
+		srcPaths,
+		basePath: process.cwd(),
+	});
 
-	if (ignore.length > 0) {
-		const ignoredCount = rawUsages.size - usages.size;
-		if (ignoredCount > 0) {
-			console.log(`Ignored ${ignoredCount} endpoints`);
-		}
+	const { kept, ignored, unmatched } = applyIgnoreRules(rawUsages, ignoreRules);
+
+	if (ignored.size > 0) {
+		console.log(`Ignored ${ignored.size} endpoints`);
+	}
+	for (const warning of formatUnmatchedIgnoreWarnings(unmatched)) {
+		console.warn(warning);
 	}
 
+	// ignore は未使用検知の除外設定なので、位置ルールは全呼び出し箇所に適用する
+	const violations = findLocationViolations(rawUsages, locations);
+
+	if (skippedConfigOutput) {
+		console.log(
+			"Skipped writing output file in check mode (pass --output to write it)",
+		);
+	}
 	if (output) {
-		writeJsonOutput(output, usages);
+		writeJsonOutput(output, kept, ignored);
 	}
 
 	if (check) {
-		const unusedEndpoints = getUnusedEndpoints(usages);
 		console.log();
-		for (const line of formatSummary(usages)) {
-			console.log(line);
-		}
-		const exitCode = unusedEndpoints.length > 0 && level === "error" ? 1 : 0;
-		return { success: true, exitCode };
+		printLines(formatSummary(kept));
+		printLines(formatSourceSummary(kept, srcRelPaths));
+		printLines(formatLocationViolations(violations));
+		return {
+			success: true,
+			exitCode: shouldFail(kept, violations, level) ? 1 : 0,
+		};
 	}
 
-	if (!output && !check) {
-		printUsageReport(usages);
+	if (!output) {
+		console.log();
+		printLines(formatTree(kept));
+		printLines(formatSummary(kept));
+		printLines(formatSourceSummary(kept, srcRelPaths));
+		printLines(formatIgnoredEndpoints(ignored));
+		printLines(formatLocationViolations(violations));
 	}
 
 	return { success: true, exitCode: 0 };
+}
+
+function shouldFail(
+	usages: Map<string, Usage[]>,
+	violations: LocationViolation[],
+	level: SeverityLevel,
+): boolean {
+	if (level !== "error") return false;
+	return getUnusedEndpoints(usages).length > 0 || violations.length > 0;
 }

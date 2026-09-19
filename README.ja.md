@@ -93,6 +93,15 @@ ignore:
   - "GET /health"
   - "GET /metrics"
   - "* /internal/*"  # ワイルドカードパターン
+  - pattern: "GET /temp/*"
+    reason: "ローカル用静的ファイル配信"
+
+# エンドポイントごとに呼び出しを許可するディレクトリ
+locations:
+  "* /users/**":
+    - "src/hooks/api/user/**"
+  "*":
+    - "src/hooks/api/**"
 ```
 
 ### 設定オプション
@@ -100,10 +109,19 @@ ignore:
 | オプション | 説明 |
 |------------|------|
 | `openapi` | OpenAPI仕様ファイル(json)のパス |
-| `src` | 解析対象ディレクトリ |
-| `output` | JSON出力先パス |
-| `level` | 重大度レベル: `error` または `warn` |
-| `ignore` | 無視するエンドポイントのリスト（ワイルドカード対応） |
+| `src` | 解析対象ディレクトリ。単一パスまたはパスのリスト |
+| `output` | JSON出力先パス。`--check` モードでは無視される |
+| `level` | 重大度レベル: `error` または `warn`。起動時に検証される |
+| `ignore` | 無視するエンドポイントのリスト。パターン文字列または `{ pattern, reason }` |
+| `locations` | エンドポイントパターン → 呼び出しを許可するディレクトリglob |
+
+設定ファイルはスキーマ検証されます。不正な値（例: `level: warning`）は黙って無視されず
+終了コード1で終了し、未知のキーは警告として報告されます:
+
+```
+Error: Invalid config file /app/openapi-usage.yaml: level: invalid level "warning" (expected "error" or "warn")
+Warning: unknown config key "levell" in /app/openapi-usage.yaml (ignored)
+```
 
 ### ignoreパターン
 
@@ -121,6 +139,82 @@ ignore:
   - "* /v1/deprecated/*" # 非推奨のv1エンドポイントすべて
 ```
 
+各エントリには理由を構造化して持たせられます。理由はレポートとJSON出力に含まれるため、
+「なぜ未使用のまま残しているか」をYAMLコメントに閉じ込めずに済みます:
+
+```yaml
+ignore:
+  - "GET /health"                  # 従来どおり文字列も可
+  - pattern: "GET /temp/*"
+    reason: "ローカル用静的ファイル配信"
+```
+
+どのエンドポイントにもマッチしないパターンは警告されます。エンドポイントの改名・削除で
+ignoreが「死んだ」ことに気づけます:
+
+```
+warning: ignore pattern "GET /sounds/*" matched no endpoint
+```
+
+### 複数のソースディレクトリ
+
+`--src` を複数回指定する、または `src` にリストを渡すと、同じ仕様に対して複数のクライアント
+（frontend と e2e など）を解析できます。いずれかのディレクトリが呼んでいれば使用済みとして扱い、
+サマリには「そのディレクトリから呼ばれていないエンドポイント数」も出力されます:
+
+```yaml
+src:
+  - packages/frontend/src
+  - e2e/api
+```
+
+```bash
+openapi-usage --src packages/frontend/src --src e2e/api --check
+```
+
+```
+───────────────────────────────────
+Unused APIs: 1
+  - DELETE /users/{id}
+Unused APIs per source:
+  packages/frontend/src: 2
+  e2e/api: 9
+```
+
+レポートとJSON出力の呼び出し位置パスは、カレントディレクトリからの相対パスです。
+
+### 呼び出し位置ルール
+
+`locations` はエンドポイントパターンに対して、呼び出しを許可するディレクトリglobを指定します。
+「APIフックは `src/hooks/api/` に集約し、ディレクトリはAPIパスの構造に合わせる」といったルールを
+機械で検査できます。許可ディレクトリ外からの呼び出しは違反として報告され、`level: error` の
+`--check` では終了コード1になります:
+
+```yaml
+locations:
+  # endpointパターン → 呼び出しを許可するディレクトリglob
+  "* /novel/**":
+    - "src/hooks/api/novel/**"
+    - "src/app/**/_lib/**"        # SSRのデータ取得
+  "* /user/**":
+    - "src/hooks/api/user/**"
+  "*":                            # 既定
+    - "src/hooks/api/**"
+```
+
+```
+───────────────────────────────────
+Location violations: 1
+  - GET /novel/{novel_id} at src/components/NovelCard.tsx:12
+    allowed: src/hooks/api/novel/**, src/app/**/_lib/** (rule: "* /novel/**")
+```
+
+- ディレクトリglobでは `**` はディレクトリ境界を越え、`*` は越えません
+- 複数のエンドポイントパターンがマッチする場合は、最も具体的なもの（ワイルドカードを除いた
+  文字数が多いもの）が適用されるため、`"*"` は既定値として機能します
+- globはカレントディレクトリからの相対パスと照合されます
+- `ignore` はこのルールを免除しません（ignoreは未使用APIの報告のみを制御します）
+
 ## CLI オプション
 
 ```bash
@@ -128,7 +222,7 @@ openapi-usage [options]
 
 オプション:
   -o, --openapi <path>  OpenAPI仕様ファイル(json)のパス
-  -s, --src <path>      解析対象ディレクトリ
+  -s, --src <path>      解析対象ディレクトリ（複数回指定可）
   --output <path>       JSON出力先パス
   --check               チェックモード（未使用があればexit 1、--level errorの場合）
   --level <level>       未使用APIの重大度レベル: "error" または "warn"（デフォルト: "error"）
@@ -136,6 +230,10 @@ openapi-usage [options]
 ```
 
 CLIオプションは設定ファイルの設定を上書きします。
+
+`--check` モードでは設定ファイルの `output` は書き込まれません。lintタスクからチェックを
+呼んでもファイルを書き換えないためです。`--check` でもJSONを書きたい場合は `--output` を
+明示的に指定してください。
 
 ### 重大度レベル
 
@@ -154,6 +252,15 @@ Unused APIs: 1
   - DELETE /users/{id}
 ```
 
+`locations` を設定している場合は、サマリーの後に違反が出力されます:
+
+```
+───────────────────────────────────
+Location violations: 1
+  - GET /users at src/api.ts:4
+    allowed: src/hooks/api/** (rule: "*")
+```
+
 ### JSON出力（--output モード）
 
 ```json
@@ -165,22 +272,35 @@ Unused APIs: 1
       "usages": [
         { "file": "src/pages/Users.tsx", "line": 42 }
       ]
+    },
+    {
+      "method": "GET",
+      "path": "/temp/{id}",
+      "usages": [],
+      "ignored": true,
+      "reason": "ローカル用静的ファイル配信"
     }
   ],
   "summary": {
     "total": 50,
-    "used": 49,
-    "unused": 1
+    "used": 48,
+    "unused": 1,
+    "ignored": 1
   }
 }
 ```
+
+ignoreされたエンドポイントも `ignored: true`（ignoreエントリに理由があれば `reason` 付き）で
+出力に含まれ、`summary.unused` ではなく `summary.ignored` にカウントされます
+（`used + unused + ignored === total`）。
 
 ## 終了コード
 
 | コード | 意味 |
 |--------|------|
-| 0 | 未使用 API なし（または `--level warn`） |
-| 1 | 未使用 API あり（`--level error` の場合） |
+| 0 | 未使用 API・位置ルール違反なし（または `--level warn`） |
+| 1 | 未使用 API または位置ルール違反あり（`--level error` の場合） |
+| 1 | 設定が不正（未知の `level`、型不一致、パス不存在など） |
 
 ## ライブラリとして使用
 
@@ -202,8 +322,8 @@ if (!specResult.success) {
 // エンドポイント一覧を抽出
 const endpoints = parseOpenAPISpec(specResult.spec);
 
-// TypeScriptファイルを解析
-const usages = analyzeTypeScriptFiles(endpoints, { srcPath: "./src" });
+// TypeScriptファイルを解析（srcPathsで複数ディレクトリを指定可）
+const usages = analyzeTypeScriptFiles(endpoints, { srcPaths: ["./src"] });
 
 // JSON出力を生成
 const output = generateJsonOutput(usages);
