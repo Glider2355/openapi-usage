@@ -193,6 +193,18 @@ describe("isIgnored", () => {
 		expect(isIgnored("GET /api/users", patterns)).toBe(false);
 	});
 
+	it("ワイルドカード以外の文字はリテラルとして扱う", () => {
+		expect(isIgnored("GET /files/a.json", ["GET /files/*.json"])).toBe(true);
+		expect(isIgnored("GET /files/aXjson", ["GET /files/*.json"])).toBe(false);
+		expect(isIgnored("GET /v1(beta)/users", ["GET /v1(beta)/*"])).toBe(true);
+		expect(isIgnored("GET /users/{id}", ["GET /users/{id}*"])).toBe(true);
+	});
+
+	it("正規表現として不正な文字を含むパターンでも例外を投げない", () => {
+		expect(isIgnored("GET /users", ["GET /foo(*"])).toBe(false);
+		expect(isIgnored("GET /foo(bar", ["GET /foo(*"])).toBe(true);
+	});
+
 	it("空のパターンリストではマッチしない", () => {
 		expect(isIgnored("GET /health", [])).toBe(false);
 	});

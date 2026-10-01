@@ -43,6 +43,20 @@ describe("matchPathGlob", () => {
 	it("ドットなどの正規表現メタ文字をリテラル扱いする", () => {
 		expect(matchPathGlob("srcXapi/x.ts", "src.api/**")).toBe(false);
 	});
+
+	it("ワイルドカードなしのglobはディレクトリとして配下にマッチする", () => {
+		expect(matchPathGlob("src/hooks/api/x.ts", "src/hooks/api")).toBe(true);
+		expect(matchPathGlob("src/hooks/api/user/x.ts", "src/hooks/api/")).toBe(
+			true,
+		);
+		expect(matchPathGlob("src/hooks/api/x.ts", "./src/hooks/api/")).toBe(true);
+		expect(matchPathGlob("src/hooks/apix/x.ts", "src/hooks/api")).toBe(false);
+	});
+
+	it("ワイルドカードなしのglobはファイルの完全一致にもマッチする", () => {
+		expect(matchPathGlob("src/api.ts", "src/api.ts")).toBe(true);
+		expect(matchPathGlob("src/api.tsx", "src/api.ts")).toBe(false);
+	});
 });
 
 describe("findLocationRule", () => {

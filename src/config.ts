@@ -66,6 +66,15 @@ const DEFAULT_CONFIG_FILES = [
 	".openapi-usage.yml",
 ];
 
+/**
+ * 正規表現のメタ文字をエスケープする
+ * @param str - エスケープ対象の文字列
+ * @returns リテラルとしてマッチする正規表現ソース
+ */
+export function escapeRegex(str: string): string {
+	return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function formatIssues(issues: z.core.$ZodIssue[]): string {
 	return issues
 		.map((issue) => {
@@ -160,7 +169,7 @@ export function normalizeIgnoreRules(entries: IgnoreEntry[]): IgnoreRule[] {
 
 /**
  * "METHOD /path" 形式のキーがパターンにマッチするか判定する
- * `*` は任意の文字列にマッチする
+ * `*` は任意の文字列にマッチし、それ以外の文字はリテラルとして扱う
  * @param endpoint - "METHOD /path" 形式のエンドポイント
  * @param pattern - マッチ対象のパターン
  * @returns マッチした場合はtrue
@@ -174,7 +183,7 @@ export function matchEndpointPattern(
 	}
 
 	const regex = new RegExp(
-		`^${pattern.replace(/\*/g, ".*").replace(/\//g, "\\/")}$`,
+		`^${pattern.split("*").map(escapeRegex).join(".*")}$`,
 	);
 	return regex.test(endpoint);
 }

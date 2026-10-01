@@ -362,7 +362,51 @@ locations:
 		});
 	});
 
+	describe("呼び出し位置ルールとJSON出力", () => {
+		it("--checkなしでoutputを書き込む場合も違反を表示する", () => {
+			writeSpec({ "/users": { get: {} } });
+			writeSrc("src", "api.ts", 'const client = {}; client.GET("/users");');
+			writeConfig(`
+output: ./api-usage.json
+locations:
+  "*":
+    - "src/hooks/api"
+`);
+
+			const result = run({ openapi: "openapi.json", src: "./src" });
+
+			expect(result.exitCode).toBe(0);
+			expect(existsSync(join(tempDir, "api-usage.json"))).toBe(true);
+			expect(logged()).toContain("Location violations: 1");
+		});
+	});
+
 	describe("理由付きignoreのJSON出力（#59）", () => {
+		it("ignore済みでも使用箇所をJSONに残す", () => {
+			writeSpec({ "/users": { get: {} } });
+			writeSrc("src", "api.ts", 'const client = {}; client.GET("/users");');
+			writeConfig(`
+output: ./api-usage.json
+ignore:
+  - "GET /users"
+`);
+
+			run({ openapi: "openapi.json", src: "./src" });
+
+			const output = JSON.parse(
+				readFileSync(join(tempDir, "api-usage.json"), "utf-8"),
+			);
+
+			expect(output.endpoints).toEqual([
+				{
+					method: "GET",
+					path: "/users",
+					usages: [{ file: "src/api.ts", line: 1 }],
+					ignored: true,
+				},
+			]);
+		});
+
 		it("ignored/reasonをJSONに含める", () => {
 			writeSpec({ "/users": { get: {} }, "/health": { get: {} } });
 			writeSrc("src", "api.ts", 'const client = {}; client.GET("/users");');

@@ -1,4 +1,4 @@
-import { matchEndpointPattern } from "./config.js";
+import { escapeRegex, matchEndpointPattern } from "./config.js";
 import type { Usage } from "./types.js";
 
 /** 呼び出し位置ルール違反 */
@@ -16,10 +16,6 @@ export interface LocationViolation {
 export interface LocationRule {
 	pattern: string;
 	allowed: string[];
-}
-
-function escapeRegexChar(char: string): string {
-	return char.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function normalizePath(path: string): string {
@@ -45,7 +41,7 @@ function globToRegex(glob: string): RegExp {
 			pattern += "[^/]*";
 			i += 1;
 		} else {
-			pattern += escapeRegexChar(glob[i]);
+			pattern += escapeRegex(glob[i]);
 			i += 1;
 		}
 	}
@@ -55,12 +51,27 @@ function globToRegex(glob: string): RegExp {
 
 /**
  * ファイルパスがディレクトリglobにマッチするか判定する
+ * ワイルドカードを含まないglobと `/` 終わりのglobはディレクトリとみなし、配下の全ファイルにマッチする
  * @param filePath - 判定対象のファイルパス（cwd相対）
- * @param glob - ディレクトリglob（例: "src/hooks/api/**"）
+ * @param glob - ディレクトリglob（例: "src/hooks/api/**"、"src/hooks/api"）
  * @returns マッチした場合はtrue
  */
 export function matchPathGlob(filePath: string, glob: string): boolean {
-	return globToRegex(normalizePath(glob)).test(normalizePath(filePath));
+	const normalizedGlob = normalizePath(glob);
+	const normalizedFile = normalizePath(filePath);
+
+	if (globToRegex(normalizedGlob).test(normalizedFile)) {
+		return true;
+	}
+
+	const isDirectory =
+		normalizedGlob.endsWith("/") || !normalizedGlob.includes("*");
+	if (!isDirectory) {
+		return false;
+	}
+
+	const directory = normalizedGlob.replace(/\/+$/, "");
+	return globToRegex(`${directory}/**`).test(normalizedFile);
 }
 
 /**

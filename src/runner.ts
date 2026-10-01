@@ -85,7 +85,10 @@ function mergeOptions(
 	return {
 		openapiPath: resolve(process.cwd(), openapi),
 		srcPaths,
-		srcRelPaths: srcPaths.map((srcPath) => relative(process.cwd(), srcPath)),
+		// srcがcwd自身の場合は相対パスが空になるため "." で表す
+		srcRelPaths: srcPaths.map(
+			(srcPath) => relative(process.cwd(), srcPath) || ".",
+		),
 		output,
 		check: cliOptions.check,
 		level: levelResult.data,
@@ -251,7 +254,8 @@ export function run(options: CliOptions): RunResult {
 		);
 	}
 	if (output) {
-		writeJsonOutput(output, kept, ignored);
+		// ignore済みエンドポイントも実際の使用箇所を出力するため、除外前のマップを渡す
+		writeJsonOutput(output, rawUsages, ignored);
 	}
 
 	if (check) {
@@ -271,8 +275,9 @@ export function run(options: CliOptions): RunResult {
 		printLines(formatSummary(kept));
 		printLines(formatSourceSummary(kept, srcRelPaths));
 		printLines(formatIgnoredEndpoints(ignored));
-		printLines(formatLocationViolations(violations));
 	}
+	// 位置ルール違反はJSON出力に含まれないため、--output 指定時も必ず表示する
+	printLines(formatLocationViolations(violations));
 
 	return { success: true, exitCode: 0 };
 }

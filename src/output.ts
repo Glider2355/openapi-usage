@@ -4,6 +4,8 @@ import type { ApiDependencies, Endpoint, Usage } from "./types.js";
 
 const SEPARATOR = "─".repeat(35);
 
+const toPosixPath = (path: string): string => path.replace(/\\/g, "/");
+
 const sortByKey = <T>(entries: [string, T][]): [string, T][] =>
 	entries.sort((a, b) => a[0].localeCompare(b[0]));
 
@@ -75,13 +77,14 @@ export const formatSourceSummary = (
 	}
 
 	const lines = srcPaths.map((srcPath) => {
-		// srcがカレントディレクトリ自身の場合は相対パスが空になり、全ファイルが対象
-		const prefix =
-			srcPath === "" || srcPath.endsWith("/") ? srcPath : `${srcPath}/`;
+		const root = toPosixPath(srcPath).replace(/\/+$/, "");
+		// srcがカレントディレクトリ自身（"" または "."）の場合は全ファイルが対象
+		const prefix = root === "" || root === "." ? "" : `${root}/`;
 		const unused = [...usages.values()].filter(
-			(list) => !list.some((usage) => usage.file.startsWith(prefix)),
+			(list) =>
+				!list.some((usage) => toPosixPath(usage.file).startsWith(prefix)),
 		).length;
-		return `  ${srcPath}: ${unused}`;
+		return `  ${srcPath || "."}: ${unused}`;
 	});
 
 	return ["Unused APIs per source:", ...lines];
@@ -140,7 +143,7 @@ export const formatLocationViolations = (
 
 /**
  * API使用状況をJSON出力用のオブジェクトに変換する
- * @param usages - エンドポイントごとの使用箇所マップ（ignore済みを除く）
+ * @param usages - エンドポイントごとの使用箇所マップ（ignore済みを含めてよい）
  * @param ignored - ignoreされたエンドポイント → 適用されたignoreルールのマップ
  * @returns JSON出力用のApiDependenciesオブジェクト
  */
@@ -148,39 +151,40 @@ export const generateJsonOutput = (
 	usages: Map<string, Usage[]>,
 	ignored: Map<string, IgnoreRule> = new Map(),
 ): ApiDependencies => {
-	const entries = sortByKey([...usages.entries()]);
-	const ignoredEntries = sortByKey([...ignored.entries()]);
-
-	const toEndpoint = (key: string, usageList: Usage[]): Endpoint => {
-		const [method, path] = key.split(" ", 2);
-		return { method, path, usages: usageList };
-	};
-
-	const endpoints: Endpoint[] = sortByKey([
-		...entries,
-		...ignoredEntries.map(([key]): [string, Usage[]] => [key, []]),
-	]).map(([key, usageList]) => {
-		const endpoint = toEndpoint(key, usageList);
-		const rule = ignored.get(key);
-		if (!rule) {
-			return endpoint;
+	// usagesに含まれないignore済みエンドポイントは使用箇所なしとして補う
+	const all = new Map(usages);
+	for (const key of ignored.keys()) {
+		if (!all.has(key)) {
+			all.set(key, []);
 		}
-		return {
-			...endpoint,
-			ignored: true,
-			...(rule.reason ? { reason: rule.reason } : {}),
-		};
-	});
+	}
 
-	const used = entries.filter(([, list]) => list.length > 0).length;
+	const endpoints: Endpoint[] = sortByKey([...all.entries()]).map(
+		([key, usageList]) => {
+			const [method, path] = key.split(" ", 2);
+			const endpoint: Endpoint = { method, path, usages: usageList };
+			const rule = ignored.get(key);
+			if (!rule) {
+				return endpoint;
+			}
+			return {
+				...endpoint,
+				ignored: true,
+				...(rule.reason ? { reason: rule.reason } : {}),
+			};
+		},
+	);
+
+	const active = endpoints.filter((endpoint) => !endpoint.ignored);
+	const used = active.filter((endpoint) => endpoint.usages.length > 0).length;
 
 	return {
 		endpoints,
 		summary: {
 			total: endpoints.length,
 			used,
-			unused: entries.length - used,
-			ignored: ignoredEntries.length,
+			unused: active.length - used,
+			ignored: endpoints.length - active.length,
 		},
 	};
 };

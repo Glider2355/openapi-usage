@@ -214,6 +214,8 @@ Location violations: 1
 ```
 
 - In directory globs, `**` crosses directory boundaries and `*` does not
+- A glob without wildcards (or ending with `/`) is treated as a directory and allows
+  every file under it, so `src/hooks/api` behaves like `src/hooks/api/**`
 - When several endpoint patterns match, the most specific one wins (the one with
   the most non-wildcard characters), so `"*"` acts as a default
 - Globs are matched against paths relative to the current working directory
@@ -257,7 +259,8 @@ Unused APIs: 1
   - DELETE /users/{id}
 ```
 
-With `locations` configured, violations are listed after the summary:
+With `locations` configured, violations are listed after the summary. They are
+printed in every mode, including when the JSON output file is written:
 
 ```
 ───────────────────────────────────
@@ -297,7 +300,8 @@ Location violations: 1
 
 Ignored endpoints are included with `ignored: true` (plus `reason` when the ignore
 entry has one) and are counted in `summary.ignored` instead of `summary.unused`,
-so `used + unused + ignored === total`.
+so `used + unused + ignored === total`. Their `usages` are still listed, so an
+ignore entry for an endpoint that is actually called stays visible.
 
 ## Exit Codes
 

@@ -158,11 +158,28 @@ describe("formatSourceSummary", () => {
 				["GET /users", [{ file: "app.ts", line: 1 }]],
 				["GET /admin", [{ file: "e2e/api/admin.spec.ts", line: 2 }]],
 			]),
-			["", "e2e/api"],
+			[".", "e2e/api"],
 		);
 
 		// srcがカレントディレクトリ自身なら配下の全ファイルが対象になる
-		expect(lines).toEqual(["Unused APIs per source:", "  : 0", "  e2e/api: 1"]);
+		expect(lines).toEqual([
+			"Unused APIs per source:",
+			"  .: 0",
+			"  e2e/api: 1",
+		]);
+	});
+
+	it("Windows区切りのパスでも集計できる", () => {
+		const lines = formatSourceSummary(
+			new Map([["GET /users", [{ file: "e2e\\api\\a.ts", line: 1 }]]]),
+			["src", "e2e\\api"],
+		);
+
+		expect(lines).toEqual([
+			"Unused APIs per source:",
+			"  src: 1",
+			"  e2e\\api: 0",
+		]);
 	});
 
 	it("srcが1つなら出力しない", () => {
@@ -262,6 +279,33 @@ describe("generateJsonOutput（ignore付き）", () => {
 			used: 1,
 			unused: 0,
 			ignored: 2,
+		});
+	});
+
+	it("ignore済みでも実際の使用箇所は保持する", () => {
+		const usages = new Map([
+			["GET /health", [{ file: "src/health.ts", line: 3 }]],
+			["GET /users", []],
+		]);
+		const ignored = new Map([["GET /health", { pattern: "GET /health" }]]);
+
+		const output = generateJsonOutput(usages, ignored);
+
+		expect(output.endpoints).toEqual([
+			{
+				method: "GET",
+				path: "/health",
+				usages: [{ file: "src/health.ts", line: 3 }],
+				ignored: true,
+			},
+			{ method: "GET", path: "/users", usages: [] },
+		]);
+		// ignore済みは使用されていても used ではなく ignored に数える
+		expect(output.summary).toEqual({
+			total: 2,
+			used: 0,
+			unused: 1,
+			ignored: 1,
 		});
 	});
 });
