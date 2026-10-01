@@ -18,7 +18,24 @@ export {
 	type SeverityLevel,
 } from "./cli.js";
 // Config
-export { type Config, isIgnored, loadConfig } from "./config.js";
+export {
+	type Config,
+	type IgnoreEntry,
+	type IgnoreRule,
+	isIgnored,
+	loadConfig,
+	matchEndpointPattern,
+	normalizeIgnoreRules,
+	severityLevelSchema,
+} from "./config.js";
+// Locations
+export {
+	findLocationRule,
+	findLocationViolations,
+	type LocationRule,
+	type LocationViolation,
+	matchPathGlob,
+} from "./locations.js";
 // OpenAPI Parser
 export {
 	type LoadResult,
@@ -27,13 +44,17 @@ export {
 } from "./openapi-parser.js";
 // Output
 export {
+	formatIgnoredEndpoints,
+	formatLocationViolations,
+	formatSourceSummary,
 	formatSummary,
 	formatTree,
+	formatUnmatchedIgnoreWarnings,
 	generateJsonOutput,
 	getUnusedEndpoints,
 } from "./output.js";
 // Runner
-export { type RunResult, run } from "./runner.js";
+export { applyIgnoreRules, type RunResult, run } from "./runner.js";
 
 // Types
 export type {

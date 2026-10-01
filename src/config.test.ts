@@ -1,6 +1,6 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { isIgnored, loadConfig } from "./config.js";
+import { isIgnored, loadConfig, normalizeIgnoreRules } from "./config.js";
 
 describe("loadConfig", () => {
 	const testDir = ".config-test-fixtures";
@@ -59,6 +59,108 @@ ignore:
 		}
 	});
 
+	it("levelが不正な値の場合はエラー（#54）", () => {
+		const configPath = `${testDir}/invalid-level.yaml`;
+		writeFileSync(configPath, "level: warning\n");
+
+		const result = loadConfig(configPath);
+
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			expect(result.error).toContain('invalid level "warning"');
+			expect(result.error).toContain('expected "error" or "warn"');
+		}
+	});
+
+	it("未知のキーは警告して無視する（#54）", () => {
+		const configPath = `${testDir}/unknown-key.yaml`;
+		writeFileSync(configPath, "src: ./src\nlevell: error\n");
+
+		const result = loadConfig(configPath);
+
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(result.warnings).toHaveLength(1);
+			expect(result.warnings[0]).toContain('unknown config key "levell"');
+			expect(result.config).not.toHaveProperty("levell");
+		}
+	});
+
+	it("型が合わない値はエラー", () => {
+		const configPath = `${testDir}/invalid-type.yaml`;
+		writeFileSync(configPath, "ignore: 'GET /health'\n");
+
+		const result = loadConfig(configPath);
+
+		expect(result.success).toBe(false);
+	});
+
+	it("srcを配列で指定できる（#57）", () => {
+		const configPath = `${testDir}/multi-src.yaml`;
+		writeFileSync(
+			configPath,
+			`
+src:
+  - packages/frontend/src
+  - e2e/api
+`,
+		);
+
+		const result = loadConfig(configPath);
+
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(result.config.src).toEqual(["packages/frontend/src", "e2e/api"]);
+		}
+	});
+
+	it("ignoreに理由付きobjectを指定できる（#59）", () => {
+		const configPath = `${testDir}/structured-ignore.yaml`;
+		writeFileSync(
+			configPath,
+			`
+ignore:
+  - "GET /health"
+  - pattern: "GET /temp/*"
+    reason: "ローカル用静的ファイル配信"
+`,
+		);
+
+		const result = loadConfig(configPath);
+
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(result.config.ignore).toEqual([
+				"GET /health",
+				{ pattern: "GET /temp/*", reason: "ローカル用静的ファイル配信" },
+			]);
+		}
+	});
+
+	it("locationsを指定できる（#58）", () => {
+		const configPath = `${testDir}/locations.yaml`;
+		writeFileSync(
+			configPath,
+			`
+locations:
+  "* /novel/**":
+    - "src/hooks/api/novel/**"
+  "*":
+    - "src/hooks/api/**"
+`,
+		);
+
+		const result = loadConfig(configPath);
+
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(result.config.locations).toEqual({
+				"* /novel/**": ["src/hooks/api/novel/**"],
+				"*": ["src/hooks/api/**"],
+			});
+		}
+	});
+
 	it("空のYAMLファイルでも動作する", () => {
 		const configPath = `${testDir}/empty.yaml`;
 		writeFileSync(configPath, "");
@@ -91,7 +193,40 @@ describe("isIgnored", () => {
 		expect(isIgnored("GET /api/users", patterns)).toBe(false);
 	});
 
+	it("ワイルドカード以外の文字はリテラルとして扱う", () => {
+		expect(isIgnored("GET /files/a.json", ["GET /files/*.json"])).toBe(true);
+		expect(isIgnored("GET /files/aXjson", ["GET /files/*.json"])).toBe(false);
+		expect(isIgnored("GET /v1(beta)/users", ["GET /v1(beta)/*"])).toBe(true);
+		expect(isIgnored("GET /users/{id}", ["GET /users/{id}*"])).toBe(true);
+	});
+
+	it("正規表現として不正な文字を含むパターンでも例外を投げない", () => {
+		expect(isIgnored("GET /users", ["GET /foo(*"])).toBe(false);
+		expect(isIgnored("GET /foo(bar", ["GET /foo(*"])).toBe(true);
+	});
+
 	it("空のパターンリストではマッチしない", () => {
 		expect(isIgnored("GET /health", [])).toBe(false);
+	});
+
+	it("理由付きobjectエントリでもマッチする（#59）", () => {
+		const patterns = [{ pattern: "GET /temp/*", reason: "static files" }];
+
+		expect(isIgnored("GET /temp/file.png", patterns)).toBe(true);
+		expect(isIgnored("GET /users", patterns)).toBe(false);
+	});
+});
+
+describe("normalizeIgnoreRules", () => {
+	it("文字列とobjectの混在を正規化する（#59）", () => {
+		const rules = normalizeIgnoreRules([
+			"GET /health",
+			{ pattern: "GET /temp/*", reason: "static files" },
+		]);
+
+		expect(rules).toEqual([
+			{ pattern: "GET /health" },
+			{ pattern: "GET /temp/*", reason: "static files" },
+		]);
 	});
 });

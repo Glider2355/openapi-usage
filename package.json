@@ -1,6 +1,6 @@
 {
 	"name": "openapi-usage",
-	"version": "0.0.4",
+	"version": "0.1.0",
 	"description": "OpenAPI仕様を正としてAPIの使用状況を静的解析し、未使用APIを検知するツール",
 	"keywords": [
 		"openapi",
@@ -56,7 +56,8 @@
 	"dependencies": {
 		"commander": "^14.0.2",
 		"ts-morph": "^27.0.2",
-		"yaml": "^2.8.2"
+		"yaml": "^2.8.2",
+		"zod": "^4.6.5"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.3.11",
