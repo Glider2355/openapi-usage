@@ -22,6 +22,7 @@ npm install -g openapi-usage
 
 ## 前提条件
 
+- Node.js 22.12 以上
 - `openapi-typescript` + `openapi-fetch` を使用したAPIクライアント
 - `createClient()` で作成されたクライアント（変数名は自動検出）
 - 動的パス生成なし（文字列リテラルのみ）

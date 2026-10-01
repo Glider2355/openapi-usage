@@ -22,6 +22,7 @@ npm install -g openapi-usage
 
 ## Prerequisites
 
+- Node.js 22.12 or later
 - API client using `openapi-typescript` + `openapi-fetch`
 - Client created with `createClient()` (variable name is auto-detected)
 - No dynamic path generation (string literals only)
