@@ -3,6 +3,8 @@ name: Publish
 on:
   release:
     types: [published]
+  # Manual runs only do a dry run, to verify the workflow without publishing
+  workflow_dispatch:
 
 jobs:
   publish:
@@ -31,4 +33,9 @@ jobs:
       - run: pnpm build
 
       - name: Publish to npm
+        if: github.event_name == 'release'
         run: npm publish --provenance --access public
+
+      - name: Publish to npm (dry run)
+        if: github.event_name != 'release'
+        run: npm publish --dry-run --access public
